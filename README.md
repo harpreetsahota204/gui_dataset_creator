@@ -262,7 +262,7 @@ This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENS
 If you use this tool in your research or project, please cite it as:
 
 ```bibtex
-@software{sahota2024guidatasetcollector,
+@software{sahota2025guidatasetcollector,
   author = {Sahota, Harpreet},
   title = {GUI Dataset Collector: A Tool for Capturing and Annotating GUI Interactions},
   year = {2025},

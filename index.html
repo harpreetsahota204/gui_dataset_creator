@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GUI Dataset Collector - Server Edition</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .main-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+        }
+
+        .side-panel {
+            width: 450px;
+            background: white;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .toolbar {
+            padding: 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .button:hover {
+            background: #f0f0f0;
+        }
+
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .button.primary {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        .button.primary:hover {
+            background: #0056b3;
+        }
+
+        .button.danger {
+            background: #dc3545;
+            color: white;
+            border-color: #dc3545;
+        }
+
+        .button.danger:hover {
+            background: #c82333;
+        }
+
+        .button.success {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+
+        .button.success:hover {
+            background: #218838;
+        }
+
+        .button.active {
+            background: #ffc107;
+            color: #000;
+            border-color: #ffc107;
+        }
+
+        .preview-area {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+            background: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .screenshot-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .screenshot {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            cursor: crosshair;
+        }
+
+        .bbox-overlay {
+            position: absolute;
+            border: 2px solid #ff0000;
+            background: rgba(255, 0, 0, 0.2);
+            cursor: pointer;
+            transition: all 0.2s;
+            pointer-events: auto;
+        }
+
+        .bbox-overlay:hover {
+            background: rgba(255, 0, 0, 0.3);
+            border-color: #ff3333;
+        }
+
+        .bbox-overlay.selected {
+            border-color: #ffc107;
+            background: rgba(255, 193, 7, 0.2);
+            border-width: 3px;
+        }
+
+        .bbox-overlay.selected:hover {
+            background: rgba(255, 193, 7, 0.3);
+        }
+
+        .bbox-label {
+            position: absolute;
+            top: -24px;
+            left: 0;
+            background: #ff0000;
+            color: white;
+            padding: 2px 6px;
+            font-size: 12px;
+            border-radius: 3px;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .bbox-overlay.selected .bbox-label {
+            background: #ffc107;
+            color: #000;
+        }
+
+        .annotation-marker {
+            position: absolute;
+            min-width: 24px;
+            height: 24px;
+            padding: 0 6px;
+            border: 2px solid #0066ff;
+            border-radius: 12px;
+            background: rgba(0, 102, 255, 0.8);
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transform: translate(-50%, -50%);
+            transition: all 0.2s;
+            pointer-events: auto;
+        }
+
+        .annotation-marker:hover {
+            background: rgba(0, 102, 255, 1);
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+
+        .annotation-marker.selected {
+            border-color: #ffc107;
+            background: rgba(255, 193, 7, 0.8);
+            border-width: 3px;
+        }
+
+        .annotation-marker.selected:hover {
+            background: rgba(255, 193, 7, 1);
+        }
+
+        .video-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+        }
+
+        .video-stream {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        .annotation-list {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .annotation-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+            position: relative;
+            padding-right: 40px;
+        }
+
+        .annotation-item:hover {
+            background: #f8f9fa;
+        }
+
+        .annotation-item.selected {
+            background: #e3f2fd;
+        }
+
+        .annotation-item:last-child {
+            border-bottom: none;
+        }
+
+        .annotation-type-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            font-size: 11px;
+            margin-left: 5px;
+        }
+
+        .annotation-type-badge.bbox {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .annotation-type-badge.point {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .delete-annotation {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 30px;
+            height: 30px;
+            border: none;
+            background: #dc3545;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0;
+            transition: background 0.2s;
+        }
+
+        .delete-annotation:hover {
+            background: #c82333;
+        }
+
+        .status-bar {
+            padding: 10px 15px;
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+            font-size: 14px;
+            color: #666;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .mode-indicator {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .mode-indicator.drawing {
+            background: #ffc107;
+            color: #000;
+        }
+
+        .mode-indicator.streaming {
+            background: #28a745;
+            color: white;
+        }
+
+        .instructions {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #0c5460;
+        }
+
+        .file-status {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #155724;
+        }
+
+        .file-status.error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .dataset-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .button-group .button {
+            flex: 1;
+        }
+
+        .keyboard-hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        .annotation-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+
+        .annotation-info strong {
+            color: #333;
+        }
+
+        .metadata-container {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+
+        .metadata-item {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .metadata-item input {
+            flex: 1;
+        }
+
+        .metadata-item .button {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+
+        .add-metadata {
+            width: 100%;
+            padding: 8px;
+            border: 1px dashed #ddd;
+            background: transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .add-metadata:hover {
+            background: #f8f9fa;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            
+            .side-panel {
+                width: 100%;
+                height: 50vh;
+                border-top: 1px solid #e0e0e0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-panel">
+            <div class="toolbar">
+                <button class="button primary" id="startStreamBtn">Start Live Capture</button>
+                <button class="button" id="captureFrameBtn" disabled>Capture Frame</button>
+                <button class="button" id="drawBboxBtn" disabled>Draw Bounding Box</button>
+                <button class="button" id="addPointBtn" disabled>Add Click Point</button>
+                <button class="button danger" id="stopStreamBtn" disabled>Stop Stream</button>
+                <button class="button success" id="loadDatasetBtn">Load Existing Dataset</button>
+            </div>
+            
+            <div class="preview-area" id="previewArea">
+                <div id="videoContainer" class="video-container" style="display: none;">
+                    <video id="videoStream" class="video-stream" autoplay></video>
+                </div>
+                <div id="screenshotContainer" class="screenshot-container" style="display: none;">
+                    <img id="screenshot" class="screenshot" alt="Screenshot">
+                </div>
+                <div id="placeholder" style="color: #666; text-align: center;">
+                    <p>No capture active</p>
+                    <p style="margin-top: 10px; font-size: 14px;">Click "Start Live Capture" to begin</p>
+                </div>
+            </div>
+            
+            <div class="status-bar">
+                <span id="statusText">Ready</span>
+                <span id="modeIndicator" class="mode-indicator">Idle</span>
+            </div>
+        </div>
+        
+        <div class="side-panel">
+            <div class="section">
+                <h3 class="section-title">Dataset Statistics</h3>
+                <div class="dataset-stats">
+                    <div class="stat-card">
+                        <div class="stat-number" id="imageCount">0</div>
+                        <div class="stat-label">Images</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="annotationCount">0</div>
+                        <div class="stat-label">Annotations</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3 class="section-title">Capture Instructions</h3>
+                <div class="instructions">
+                    <strong>Live Capture Mode:</strong><br>
+                    1. Click "Start Live Capture" and select window<br>
+                    2. Interact with the window normally<br>
+                    3. Click "Capture Frame" when ready<br>
+                    4. <strong>Click on bounding boxes/points to edit them</strong><br>
+                    5. Add task descriptions and metadata per annotation<br>
+                    6. Save frame to <code>data/</code> folder<br><br>
+                    <strong>Fixed Issues:</strong><br>
+                    • Annotations are now clickable and editable<br>
+                    • Task descriptions moved to annotation level<br>
+                    • Added image metadata (app/platform)<br>
+                    • Custom annotation metadata support
+                </div>
+            </div>
+
+            <div class="section">
+                <h3 class="section-title">Current Frame Info</h3>
+                <div class="form-group">
+                    <label>Frame ID</label>
+                    <input type="text" class="form-control" id="frameId" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Application</label>
+                    <input type="text" class="form-control" id="application" placeholder="e.g., Chrome, Photoshop, VSCode">
+                </div>
+                <div class="form-group">
+                    <label>Platform</label>
+                    <select class="form-control" id="platform">
+                        <option value="">Select platform</option>
+                        <option value="Windows">Windows</option>
+                        <option value="macOS">macOS</option>
+                        <option value="Linux">Linux</option>
+                        <option value="Web">Web Browser</option>
+                        <option value="Mobile">Mobile</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3 class="section-title">Annotations</h3>
+                <div class="annotation-list" id="annotationList">
+                    <div style="padding: 10px; color: #666; text-align: center;">No annotations yet</div>
+                </div>
+            </div>
+            
+            <div class="section" id="annotationForm" style="display: none;">
+                <h3 class="section-title">Edit Annotation</h3>
+                <div class="annotation-info" id="annotationInfo"></div>
+                
+                <div class="form-group">
+                    <label>Task Description</label>
+                    <textarea class="form-control" id="taskDescription" placeholder="Describe what this annotation represents..." rows="2"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Action Type</label>
+                    <select class="form-control" id="actionType">
+                        <option value="click">Click</option>
+                        <option value="type">Type Text</option>
+                        <option value="select">Select</option>
+                        <option value="hover">Hover</option>
+                        <option value="drag">Drag</option>
+                        <option value="right_click">Right Click</option>
+                        <option value="double_click">Double Click</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Element Info</label>
+                    <input type="text" class="form-control" id="elementInfo" placeholder="e.g., button#submit, .menu-item">
+                </div>
+                
+                <div class="form-group">
+                    <label>Custom Metadata</label>
+                    <div class="metadata-container" id="customMetadata">
+                        <button type="button" class="add-metadata" id="addMetadataBtn">+ Add Custom Field</button>
+                    </div>
+                </div>
+                
+                <div class="button-group">
+                    <button class="button primary" id="saveAnnotationBtn">Save</button>
+                    <button class="button danger" id="deleteAnnotationBtn">Delete</button>
+                </div>
+                <div class="keyboard-hint">Tip: Press Delete key to quickly remove selected annotation</div>
+            </div>
+            
+            <div class="section">
+                <button class="button primary" id="saveFrameBtn" style="width: 100%; margin-bottom: 10px;">Save Current Frame</button>
+                <button class="button success" id="exportDatasetBtn" style="width: 100%;">Export Full Dataset</button>
+                <div id="fileStatus" class="file-status" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class GUICollectorWithServer {
+            constructor() {
+                this.serverUrl = 'http://localhost:3000';
+                this.stream = null;
+                this.currentFrame = null;
+                this.frames = [];
+                this.mode = 'idle';
+                this.drawingBbox = false;
+                this.currentBbox = null;
+                this.selectedAnnotation = null;
+                this.nextFrameId = 1;
+                this.nextAnnotationId = 1;
+                
+                // COCO dataset structure
+                this.dataset = {
+                    info: {
+                        description: "GUI Interaction Dataset",
+                        version: "1.0",
+                        year: new Date().getFullYear(),
+                        contributor: "GUI Dataset Collector",
+                        date_created: new Date().toISOString()
+                    },
+                    licenses: [{
+                        id: 1,
+                        name: "Attribution License",
+                        url: ""
+                    }],
+                    categories: [
+                        { id: 1, name: "click", supercategory: "interaction" },
+                        { id: 2, name: "type", supercategory: "interaction" },
+                        { id: 3, name: "select", supercategory: "interaction" },
+                        { id: 4, name: "hover", supercategory: "interaction" },
+                        { id: 5, name: "drag", supercategory: "interaction" },
+                        { id: 6, name: "right_click", supercategory: "interaction" },
+                        { id: 7, name: "double_click", supercategory: "interaction" }
+                    ],
+                    images: [],
+                    annotations: []
+                };
+                
+                this.initializeElements();
+                this.attachEventListeners();
+                this.checkServerConnection();
+                this.loadExistingDataset();
+            }
+            
+            initializeElements() {
+                this.elements = {
+                    startStreamBtn: document.getElementById('startStreamBtn'),
+                    captureFrameBtn: document.getElementById('captureFrameBtn'),
+                    drawBboxBtn: document.getElementById('drawBboxBtn'),
+                    addPointBtn: document.getElementById('addPointBtn'),
+                    stopStreamBtn: document.getElementById('stopStreamBtn'),
+                    loadDatasetBtn: document.getElementById('loadDatasetBtn'),
+                    exportDatasetBtn: document.getElementById('exportDatasetBtn'),
+                    videoContainer: document.getElementById('videoContainer'),
+                    videoStream: document.getElementById('videoStream'),
+                    screenshotContainer: document.getElementById('screenshotContainer'),
+                    screenshot: document.getElementById('screenshot'),
+                    placeholder: document.getElementById('placeholder'),
+                    statusText: document.getElementById('statusText'),
+                    modeIndicator: document.getElementById('modeIndicator'),
+                    frameId: document.getElementById('frameId'),
+                    application: document.getElementById('application'),
+                    platform: document.getElementById('platform'),
+                    taskDescription: document.getElementById('taskDescription'),
+                    annotationList: document.getElementById('annotationList'),
+                    annotationForm: document.getElementById('annotationForm'),
+                    annotationInfo: document.getElementById('annotationInfo'),
+                    actionType: document.getElementById('actionType'),
+                    elementInfo: document.getElementById('elementInfo'),
+                    customMetadata: document.getElementById('customMetadata'),
+                    addMetadataBtn: document.getElementById('addMetadataBtn'),
+                    saveAnnotationBtn: document.getElementById('saveAnnotationBtn'),
+                    deleteAnnotationBtn: document.getElementById('deleteAnnotationBtn'),
+                    saveFrameBtn: document.getElementById('saveFrameBtn'),
+                    fileStatus: document.getElementById('fileStatus'),
+                    imageCount: document.getElementById('imageCount'),
+                    annotationCount: document.getElementById('annotationCount')
+                };
+            }
+            
+            attachEventListeners() {
+                this.elements.startStreamBtn.addEventListener('click', () => this.startStream());
+                this.elements.captureFrameBtn.addEventListener('click', () => this.captureFrame());
+                this.elements.drawBboxBtn.addEventListener('click', () => this.toggleDrawMode());
+                this.elements.addPointBtn.addEventListener('click', () => this.togglePointMode());
+                this.elements.stopStreamBtn.addEventListener('click', () => this.stopStream());
+                this.elements.loadDatasetBtn.addEventListener('click', () => this.loadExistingDataset());
+                this.elements.exportDatasetBtn.addEventListener('click', () => this.exportDataset());
+                this.elements.saveAnnotationBtn.addEventListener('click', () => this.saveAnnotation());
+                this.elements.deleteAnnotationBtn.addEventListener('click', () => this.deleteSelectedAnnotation());
+                this.elements.saveFrameBtn.addEventListener('click', () => this.saveCurrentFrame());
+                this.elements.addMetadataBtn.addEventListener('click', () => this.addMetadataField());
+                
+                // Mouse events for drawing
+                this.elements.screenshot.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+                this.elements.screenshot.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                this.elements.screenshot.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+                
+                // Prevent screenshot clicks from bubbling when not in drawing mode
+                this.elements.screenshot.addEventListener('click', (e) => {
+                    if (this.mode !== 'drawing' && this.mode !== 'pointing') {
+                        e.stopPropagation();
+                    }
+                });
+                
+                // Keyboard events
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Delete' && this.selectedAnnotation) {
+                        this.deleteSelectedAnnotation();
+                    }
+                });
+            }
+            
+            async checkServerConnection() {
+                try {
+                    const response = await fetch(`${this.serverUrl}/list-files`);
+                    if (response.ok) {
+                        this.updateStatus('Server connected - files will save to data/ folder');
+                    }
+                } catch (error) {
+                    this.updateStatus('Server not running - start with: npm start', 'error');
+                    this.showFileStatus('Server not detected. Run "npm start" in terminal', 'error');
+                }
+            }
+            
+            async loadExistingDataset() {
+                try {
+                    const response = await fetch(`${this.serverUrl}/load-dataset`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.dataset = data;
+                        
+                        // Update IDs to continue from existing data
+                        if (this.dataset.images.length > 0) {
+                            this.nextFrameId = Math.max(...this.dataset.images.map(img => img.id)) + 1;
+                        }
+                        if (this.dataset.annotations.length > 0) {
+                            this.nextAnnotationId = Math.max(...this.dataset.annotations.map(ann => ann.id)) + 1;
+                        }
+                        
+                        this.updateDatasetStats();
+                        this.updateStatus(`Loaded existing dataset: ${this.dataset.images.length} images`);
+                    }
+                } catch (error) {
+                    // No existing dataset, start fresh
+                    console.log('Starting fresh dataset');
+                }
+            }
+            
+            async startStream() {
+                try {
+                    this.stream = await navigator.mediaDevices.getDisplayMedia({
+                        video: {
+                            cursor: 'always'
+                        },
+                        audio: false
+                    });
+                    
+                    this.elements.videoStream.srcObject = this.stream;
+                    this.elements.videoContainer.style.display = 'block';
+                    this.elements.placeholder.style.display = 'none';
+                    this.elements.screenshotContainer.style.display = 'none';
+                    
+                    // Enable/disable buttons
+                    this.elements.startStreamBtn.disabled = true;
+                    this.elements.captureFrameBtn.disabled = false;
+                    this.elements.stopStreamBtn.disabled = false;
+                    
+                    this.mode = 'streaming';
+                    this.updateStatus('Live streaming - interact with your window and capture when ready');
+                    this.updateModeIndicator('Streaming', 'streaming');
+                    
+                    // Handle stream end
+                    this.stream.getVideoTracks()[0].addEventListener('ended', () => {
+                        this.stopStream();
+                    });
+                    
+                } catch (error) {
+                    this.updateStatus('Error: ' + error.message, 'error');
+                }
+            }
+            
+            captureFrame() {
+                if (!this.stream) return;
+                
+                const video = this.elements.videoStream;
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+                
+                this.currentFrame = {
+                    id: this.nextFrameId++,
+                    dataUrl: canvas.toDataURL('image/png'),
+                    width: canvas.width,
+                    height: canvas.height,
+                    timestamp: new Date().toISOString(),
+                    annotations: []
+                };
+                
+                // Display the captured frame
+                this.elements.screenshot.src = this.currentFrame.dataUrl;
+                this.elements.videoContainer.style.display = 'none';
+                this.elements.screenshotContainer.style.display = 'block';
+                
+                // Enable annotation buttons
+                this.elements.drawBboxBtn.disabled = false;
+                this.elements.addPointBtn.disabled = false;
+                
+                // Update UI
+                this.elements.frameId.value = `frame_${this.currentFrame.id}`;
+                this.updateStatus(`Frame ${this.currentFrame.id} captured - add annotations`);
+                this.updateModeIndicator('Annotating');
+                
+                // Clear previous annotations from display
+                this.clearAnnotationDisplay();
+                this.updateAnnotationList();
+                
+                // Hide annotation form
+                this.elements.annotationForm.style.display = 'none';
+                this.selectedAnnotation = null;
+            }
+            
+            toggleDrawMode() {
+                if (this.mode === 'drawing') {
+                    this.mode = 'annotating';
+                    this.elements.drawBboxBtn.classList.remove('active');
+                    this.updateModeIndicator('Annotating');
+                } else {
+                    this.mode = 'drawing';
+                    this.elements.drawBboxBtn.classList.add('active');
+                    this.elements.addPointBtn.classList.remove('active');
+                    this.updateModeIndicator('Drawing Box', 'drawing');
+                    this.updateStatus('Click and drag to draw bounding box');
+                }
+            }
+            
+            togglePointMode() {
+                if (this.mode === 'pointing') {
+                    this.mode = 'annotating';
+                    this.elements.addPointBtn.classList.remove('active');
+                    this.updateModeIndicator('Annotating');
+                } else {
+                    this.mode = 'pointing';
+                    this.elements.addPointBtn.classList.add('active');
+                    this.elements.drawBboxBtn.classList.remove('active');
+                    this.updateModeIndicator('Adding Points', 'drawing');
+                    this.updateStatus('Click to add interaction points');
+                }
+            }
+            
+            handleMouseDown(e) {
+                if (!this.currentFrame) return;
+                
+                const rect = this.elements.screenshot.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                if (this.mode === 'drawing') {
+                    e.preventDefault();
+                    this.startDrawing(x, y);
+                } else if (this.mode === 'pointing') {
+                    e.preventDefault();
+                    this.addClickPoint(x, y);
+                }
+            }
+            
+            handleMouseMove(e) {
+                if (!this.drawingBbox || this.mode !== 'drawing') return;
+                
+                const rect = this.elements.screenshot.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                this.updateDrawing(x, y);
+            }
+            
+            handleMouseUp(e) {
+                if (!this.drawingBbox || this.mode !== 'drawing') return;
+                
+                const rect = this.elements.screenshot.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                this.finishDrawing(x, y);
+            }
+            
+            startDrawing(x, y) {
+                this.drawingBbox = true;
+                this.currentBbox = {
+                    startX: x,
+                    startY: y,
+                    element: document.createElement('div')
+                };
+                
+                this.currentBbox.element.className = 'bbox-overlay';
+                this.currentBbox.element.style.left = x + 'px';
+                this.currentBbox.element.style.top = y + 'px';
+                this.currentBbox.element.style.width = '0px';
+                this.currentBbox.element.style.height = '0px';
+                this.currentBbox.element.style.pointerEvents = 'none';
+                
+                this.elements.screenshotContainer.appendChild(this.currentBbox.element);
+            }
+            
+            updateDrawing(x, y) {
+                if (!this.currentBbox) return;
+                
+                const width = x - this.currentBbox.startX;
+                const height = y - this.currentBbox.startY;
+                
+                if (width < 0) {
+                    this.currentBbox.element.style.left = x + 'px';
+                    this.currentBbox.element.style.width = Math.abs(width) + 'px';
+                } else {
+                    this.currentBbox.element.style.width = width + 'px';
+                }
+                
+                if (height < 0) {
+                    this.currentBbox.element.style.top = y + 'px';
+                    this.currentBbox.element.style.height = Math.abs(height) + 'px';
+                } else {
+                    this.currentBbox.element.style.height = height + 'px';
+                }
+            }
+            
+            finishDrawing(x, y) {
+                this.drawingBbox = false;
+                
+                if (!this.currentBbox) return;
+                
+                const imgWidth = this.elements.screenshot.offsetWidth;
+                const imgHeight = this.elements.screenshot.offsetHeight;
+                const scaleX = this.currentFrame.width / imgWidth;
+                const scaleY = this.currentFrame.height / imgHeight;
+                
+                // Calculate final bbox
+                const x1 = Math.min(this.currentBbox.startX, x);
+                const y1 = Math.min(this.currentBbox.startY, y);
+                const x2 = Math.max(this.currentBbox.startX, x);
+                const y2 = Math.max(this.currentBbox.startY, y);
+                
+                // Minimum size check
+                if (Math.abs(x2 - x1) < 5 || Math.abs(y2 - y1) < 5) {
+                    this.currentBbox.element.remove();
+                    this.currentBbox = null;
+                    return;
+                }
+                
+                // Convert to absolute coordinates
+                const bbox = [
+                    x1 * scaleX,
+                    y1 * scaleY,
+                    (x2 - x1) * scaleX,
+                    (y2 - y1) * scaleY
+                ];
+                
+                // Remove the temporary overlay
+                this.currentBbox.element.remove();
+                
+                // Create annotation
+                const annotation = {
+                    id: this.nextAnnotationId++,
+                    bbox: bbox,
+                    category_id: 1, // default to click
+                    area: bbox[2] * bbox[3],
+                    iscrowd: 0,
+                    attributes: {
+                        task_description: '',
+                        action_type: 'click',
+                        element_info: '',
+                        custom_metadata: {}
+                    }
+                };
+                
+                this.currentFrame.annotations.push(annotation);
+                this.displayAnnotation(annotation);
+                this.updateAnnotationList();
+                this.selectAnnotation(annotation);
+                
+                this.currentBbox = null;
+                this.updateStatus('Bounding box added - fill in annotation details');
+            }
+            
+            addClickPoint(x, y) {
+                const imgWidth = this.elements.screenshot.offsetWidth;
+                const imgHeight = this.elements.screenshot.offsetHeight;
+                const scaleX = this.currentFrame.width / imgWidth;
+                const scaleY = this.currentFrame.height / imgHeight;
+                
+                // Convert to absolute coordinates
+                const absX = x * scaleX;
+                const absY = y * scaleY;
+                
+                // Create a small bbox around the click point and keypoints
+                const annotation = {
+                    id: this.nextAnnotationId++,
+                    bbox: [absX - 10, absY - 10, 20, 20],
+                    keypoints: [absX, absY, 2],
+                    category_id: 1,
+                    area: 400,
+                    iscrowd: 0,
+                    attributes: {
+                        task_description: '',
+                        action_type: 'click',
+                        element_info: '',
+                        custom_metadata: {}
+                    }
+                };
+                
+                this.currentFrame.annotations.push(annotation);
+                this.displayAnnotation(annotation);
+                this.updateAnnotationList();
+                this.selectAnnotation(annotation);
+                
+                this.updateStatus('Click point added - fill in annotation details');
+            }
+            
+            displayAnnotation(annotation) {
+                const imgWidth = this.elements.screenshot.offsetWidth;
+                const imgHeight = this.elements.screenshot.offsetHeight;
+                const scaleX = imgWidth / this.currentFrame.width;
+                const scaleY = imgHeight / this.currentFrame.height;
+                
+                if (annotation.keypoints) {
+                    // Display as point
+                    const marker = document.createElement('div');
+                    marker.className = 'annotation-marker';
+                    marker.textContent = annotation.id;
+                    marker.style.left = (annotation.keypoints[0] * scaleX) + 'px';
+                    marker.style.top = (annotation.keypoints[1] * scaleY) + 'px';
+                    marker.dataset.annotationId = annotation.id;
+                    
+                    // Make marker clickable
+                    marker.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.selectAnnotation(annotation);
+                    });
+                    
+                    this.elements.screenshotContainer.appendChild(marker);
+                } else {
+                    // Display as bbox
+                    const bbox = document.createElement('div');
+                    bbox.className = 'bbox-overlay';
+                    bbox.style.left = (annotation.bbox[0] * scaleX) + 'px';
+                    bbox.style.top = (annotation.bbox[1] * scaleY) + 'px';
+                    bbox.style.width = (annotation.bbox[2] * scaleX) + 'px';
+                    bbox.style.height = (annotation.bbox[3] * scaleY) + 'px';
+                    bbox.dataset.annotationId = annotation.id;
+                    
+                    // Add label
+                    const label = document.createElement('div');
+                    label.className = 'bbox-label';
+                    label.textContent = annotation.id;
+                    bbox.appendChild(label);
+                    
+                    // Make entire bbox clickable
+                    bbox.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.selectAnnotation(annotation);
+                    });
+                    
+                    this.elements.screenshotContainer.appendChild(bbox);
+                }
+            }
+            
+            clearAnnotationDisplay() {
+                const elements = this.elements.screenshotContainer.querySelectorAll('.bbox-overlay, .annotation-marker');
+                elements.forEach(el => el.remove());
+            }
+            
+            updateAnnotationList() {
+                this.elements.annotationList.innerHTML = '';
+                
+                if (!this.currentFrame || this.currentFrame.annotations.length === 0) {
+                    this.elements.annotationList.innerHTML = '<div style="padding: 10px; color: #666; text-align: center;">No annotations yet</div>';
+                    return;
+                }
+                
+                this.currentFrame.annotations.forEach(annotation => {
+                    const item = document.createElement('div');
+                    item.className = 'annotation-item';
+                    if (this.selectedAnnotation && this.selectedAnnotation.id === annotation.id) {
+                        item.classList.add('selected');
+                    }
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'delete-annotation';
+                    deleteBtn.innerHTML = '×';
+                    deleteBtn.title = 'Delete annotation';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.deleteAnnotation(annotation);
+                    };
+                    
+                    const typeSpan = document.createElement('span');
+                    typeSpan.className = `annotation-type-badge ${annotation.keypoints ? 'point' : 'bbox'}`;
+                    typeSpan.textContent = annotation.keypoints ? 'Point' : 'Box';
+                    
+                    const taskDesc = annotation.attributes.task_description || 'No task description';
+                    const shortDesc = taskDesc.length > 30 ? taskDesc.substring(0, 30) + '...' : taskDesc;
+                    
+                    item.innerHTML = `
+                        <strong>Annotation ${annotation.id}</strong>
+                        <div style="font-size: 12px; color: #666; margin-top: 2px;">${annotation.attributes.action_type} - ${shortDesc}</div>
+                    `;
+                    
+                    item.querySelector('strong').appendChild(typeSpan);
+                    item.appendChild(deleteBtn);
+                    item.addEventListener('click', () => this.selectAnnotation(annotation));
+                    this.elements.annotationList.appendChild(item);
+                });
+            }
+            
+            selectAnnotation(annotation) {
+                this.selectedAnnotation = annotation;
+                this.elements.annotationForm.style.display = 'block';
+                
+                // Highlight selected annotation
+                document.querySelectorAll('.bbox-overlay, .annotation-marker').forEach(el => {
+                    el.classList.toggle('selected', el.dataset.annotationId == annotation.id);
+                });
+                
+                // Update annotation info
+                const isPoint = !!annotation.keypoints;
+                this.elements.annotationInfo.innerHTML = `
+                    <strong>Annotation ID:</strong> ${annotation.id}<br>
+                    <strong>Type:</strong> ${isPoint ? 'Click Point' : 'Bounding Box'}<br>
+                    ${isPoint ? 
+                        `<strong>Position:</strong> (${Math.round(annotation.keypoints[0])}, ${Math.round(annotation.keypoints[1])})` :
+                        `<strong>Size:</strong> ${Math.round(annotation.bbox[2])} × ${Math.round(annotation.bbox[3])} px`
+                    }
+                `;
+                
+                // Load annotation data
+                this.elements.taskDescription.value = annotation.attributes.task_description || '';
+                this.elements.actionType.value = annotation.attributes.action_type;
+                this.elements.elementInfo.value = annotation.attributes.element_info || '';
+                
+                // Load custom metadata
+                this.loadCustomMetadata(annotation.attributes.custom_metadata || {});
+                
+                this.updateAnnotationList();
+            }
+            
+            loadCustomMetadata(metadata) {
+                // Clear existing metadata fields (except add button)
+                const container = this.elements.customMetadata;
+                const metadataItems = container.querySelectorAll('.metadata-item');
+                metadataItems.forEach(item => item.remove());
+                
+                // Add metadata fields
+                Object.entries(metadata).forEach(([key, value]) => {
+                    this.createMetadataField(key, value);
+                });
+            }
+            
+            addMetadataField() {
+                this.createMetadataField('', '');
+            }
+            
+            createMetadataField(key = '', value = '') {
+                const container = this.elements.customMetadata;
+                const addButton = this.elements.addMetadataBtn;
+                
+                const metadataItem = document.createElement('div');
+                metadataItem.className = 'metadata-item';
+                
+                metadataItem.innerHTML = `
+                    <input type="text" class="form-control metadata-key" placeholder="Field name" value="${key}">
+                    <input type="text" class="form-control metadata-value" placeholder="Field value" value="${value}">
+                    <button type="button" class="button danger">×</button>
+                `;
+                
+                // Add delete functionality
+                const deleteBtn = metadataItem.querySelector('.button');
+                deleteBtn.addEventListener('click', () => metadataItem.remove());
+                
+                // Insert before the add button
+                container.insertBefore(metadataItem, addButton);
+            }
+            
+            saveAnnotation() {
+                if (!this.selectedAnnotation) return;
+                
+                this.selectedAnnotation.attributes.task_description = this.elements.taskDescription.value;
+                this.selectedAnnotation.attributes.action_type = this.elements.actionType.value;
+                this.selectedAnnotation.attributes.element_info = this.elements.elementInfo.value;
+                
+                // Collect custom metadata
+                const customMetadata = {};
+                const metadataItems = this.elements.customMetadata.querySelectorAll('.metadata-item');
+                metadataItems.forEach(item => {
+                    const key = item.querySelector('.metadata-key').value.trim();
+                    const value = item.querySelector('.metadata-value').value.trim();
+                    if (key && value) {
+                        customMetadata[key] = value;
+                    }
+                });
+                this.selectedAnnotation.attributes.custom_metadata = customMetadata;
+                
+                // Update category based on action type
+                const categoryMap = {
+                    'click': 1,
+                    'type': 2,
+                    'select': 3,
+                    'hover': 4,
+                    'drag': 5,
+                    'right_click': 6,
+                    'double_click': 7
+                };
+                this.selectedAnnotation.category_id = categoryMap[this.selectedAnnotation.attributes.action_type] || 1;
+                
+                this.updateAnnotationList();
+                this.updateStatus('Annotation saved');
+            }
+            
+            deleteAnnotation(annotation) {
+                if (confirm(`Delete annotation ${annotation.id}?`)) {
+                    // Remove from array
+                    const index = this.currentFrame.annotations.findIndex(a => a.id === annotation.id);
+                    if (index > -1) {
+                        this.currentFrame.annotations.splice(index, 1);
+                    }
+                    
+                    // Remove from display
+                    const element = this.elements.screenshotContainer.querySelector(`[data-annotation-id="${annotation.id}"]`);
+                    if (element) {
+                        element.remove();
+                    }
+                    
+                    // Clear selection if this was selected
+                    if (this.selectedAnnotation && this.selectedAnnotation.id === annotation.id) {
+                        this.selectedAnnotation = null;
+                        this.elements.annotationForm.style.display = 'none';
+                    }
+                    
+                    this.updateAnnotationList();
+                    this.updateStatus(`Annotation ${annotation.id} deleted`);
+                }
+            }
+            
+            deleteSelectedAnnotation() {
+                if (this.selectedAnnotation) {
+                    this.deleteAnnotation(this.selectedAnnotation);
+                }
+            }
+            
+            async saveCurrentFrame() {
+                if (!this.currentFrame) {
+                    alert('No frame captured');
+                    return;
+                }
+                
+                try {
+                    // Save image to server
+                    const imageFilename = `frame_${this.currentFrame.id}.png`;
+                    const imageResponse = await fetch(`${this.serverUrl}/save-image`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            filename: imageFilename,
+                            data: this.currentFrame.dataUrl
+                        })
+                    });
+                    
+                    if (!imageResponse.ok) throw new Error('Failed to save image');
+                    
+                    // Create COCO image entry with image metadata
+                    const imageEntry = {
+                        id: this.currentFrame.id,
+                        file_name: imageFilename,
+                        width: this.currentFrame.width,
+                        height: this.currentFrame.height,
+                        date_captured: this.currentFrame.timestamp,
+                        application: this.elements.application.value || '',
+                        platform: this.elements.platform.value || ''
+                    };
+                    
+                    // Add to dataset
+                    this.dataset.images.push(imageEntry);
+                    
+                    // Add annotations with proper image_id
+                    this.currentFrame.annotations.forEach(ann => {
+                        const cocoAnnotation = {
+                            ...ann,
+                            image_id: this.currentFrame.id
+                        };
+                        this.dataset.annotations.push(cocoAnnotation);
+                    });
+                    
+                    // Save updated dataset
+                    await this.saveDatasetToServer();
+                    
+                    // Save frame to local array
+                    this.frames.push(this.currentFrame);
+                    
+                    // Update stats
+                    this.updateDatasetStats();
+                    
+                    // Return to video stream
+                    this.elements.videoContainer.style.display = 'block';
+                    this.elements.screenshotContainer.style.display = 'none';
+                    this.elements.drawBboxBtn.disabled = true;
+                    this.elements.addPointBtn.disabled = true;
+                    this.elements.annotationForm.style.display = 'none';
+                    
+                    // Reset button states
+                    this.elements.drawBboxBtn.classList.remove('active');
+                    this.elements.addPointBtn.classList.remove('active');
+                    
+                    this.showFileStatus(`Frame ${this.currentFrame.id} saved to data/${imageFilename}`, 'success');
+                    this.updateStatus(`Frame ${this.currentFrame.id} saved with ${this.currentFrame.annotations.length} annotations`);
+                    this.updateModeIndicator('Streaming', 'streaming');
+                    
+                    // Reset current frame but keep image metadata
+                    const savedApp = this.elements.application.value;
+                    const savedPlatform = this.elements.platform.value;
+                    
+                    this.currentFrame = null;
+                    this.selectedAnnotation = null;
+                    this.mode = 'streaming';
+                    
+                    // Keep the metadata for next frame
+                    this.elements.application.value = savedApp;
+                    this.elements.platform.value = savedPlatform;
+                    
+                } catch (error) {
+                    this.showFileStatus(`Error saving: ${error.message}`, 'error');
+                    this.updateStatus('Error saving frame', 'error');
+                }
+            }
+            
+            async saveDatasetToServer() {
+                const response = await fetch(`${this.serverUrl}/save-json`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: 'annotations_coco.json',
+                        data: this.dataset
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to save dataset');
+                return response.json();
+            }
+            
+            async exportDataset() {
+                try {
+                    await this.saveDatasetToServer();
+                    this.showFileStatus('Dataset exported to data/annotations_coco.json', 'success');
+                    this.updateStatus(`Dataset exported: ${this.dataset.images.length} images, ${this.dataset.annotations.length} annotations`);
+                } catch (error) {
+                    this.showFileStatus(`Export error: ${error.message}`, 'error');
+                }
+            }
+            
+            stopStream() {
+                if (this.stream) {
+                    this.stream.getTracks().forEach(track => track.stop());
+                    this.stream = null;
+                }
+                
+                this.elements.videoContainer.style.display = 'none';
+                this.elements.screenshotContainer.style.display = 'none';
+                this.elements.placeholder.style.display = 'block';
+                this.elements.startStreamBtn.disabled = false;
+                this.elements.captureFrameBtn.disabled = true;
+                this.elements.stopStreamBtn.disabled = true;
+                this.elements.drawBboxBtn.disabled = true;
+                this.elements.addPointBtn.disabled = true;
+                this.elements.annotationForm.style.display = 'none';
+                
+                // Reset button states
+                this.elements.drawBboxBtn.classList.remove('active');
+                this.elements.addPointBtn.classList.remove('active');
+                
+                this.mode = 'idle';
+                this.selectedAnnotation = null;
+                this.currentFrame = null;
+                this.updateStatus('Stream stopped');
+                this.updateModeIndicator('Idle');
+            }
+            
+            updateDatasetStats() {
+                this.elements.imageCount.textContent = this.dataset.images.length;
+                this.elements.annotationCount.textContent = this.dataset.annotations.length;
+            }
+            
+            updateStatus(message, type = 'info') {
+                this.elements.statusText.textContent = message;
+                this.elements.statusText.style.color = type === 'error' ? '#dc3545' : '#666';
+            }
+            
+            updateModeIndicator(mode, className = '') {
+                this.elements.modeIndicator.textContent = mode;
+                this.elements.modeIndicator.className = 'mode-indicator';
+                if (className) {
+                    this.elements.modeIndicator.classList.add(className);
+                }
+            }
+            
+            showFileStatus(message, type = 'success') {
+                this.elements.fileStatus.textContent = message;
+                this.elements.fileStatus.className = `file-status ${type}`;
+                this.elements.fileStatus.style.display = 'block';
+                
+                setTimeout(() => {
+                    this.elements.fileStatus.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        // Initialize
+        const collector = new GUICollectorWithServer();
+    </script>
+</body>
+</html>

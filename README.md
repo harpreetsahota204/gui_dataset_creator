@@ -2,6 +2,7 @@
 
 A comprehensive tool for collecting and building datasets for GUI agents. This tool allows you to capture screenshots of user interfaces, annotate interactions with bounding boxes and click points, and export structured datasets in COCO format.
 
+![Vibe](https://img.shields.io/badge/Vibe_coded_with-Claude_4_Opus-blueviolet)
 ![GUI Dataset Collector](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)
 ![Browser](https://img.shields.io/badge/Browser-Chrome%2FFirefox%2FEdge-orange.svg)

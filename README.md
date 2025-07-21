@@ -256,3 +256,20 @@ This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENS
 - Check that the server is running
 - Ensure you have write permissions in the project directory
 - Look for error messages in the browser console
+
+## 📚 Citation
+
+If you use this tool in your research or project, please cite it as:
+
+```bibtex
+@software{sahota2024guidatasetcollector,
+  author = {Sahota, Harpreet},
+  title = {GUI Dataset Collector: A Tool for Capturing and Annotating GUI Interactions},
+  year = {2025},
+  url = {https://github.com/harpreetsahota204/gui_dataset_creator},
+}
+```
+
+Or in text:
+
+Sahota, H. (2025). GUI Dataset Collector: A Tool for Capturing and Annotating GUI Interactions [Computer software]. https://github.com/harpreetsahota204/gui_dataset_creator

@@ -44,8 +44,8 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 ### Setup
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/gui-dataset-collector.git
-   cd gui-dataset-collector
+   git clone https://github.com/harpreetsahota204/gui_dataset_creator.git
+   cd gui_dataset_creator
    ```
 
 2. **Install dependencies**
@@ -228,7 +228,7 @@ The tool exports data in standard COCO format:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
 
 ## 🐛 Troubleshooting
 
@@ -253,20 +253,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Check that the server is running
 - Ensure you have write permissions in the project directory
 - Look for error messages in the browser console
-
-### Browser Compatibility
-- ✅ Chrome 88+
-- ✅ Firefox 87+
-- ✅ Edge 88+
-- ✅ Safari 14.1+ (limited screen capture support)
-
-## 📞 Support
-
-If you encounter any issues or have questions:
-1. Check the troubleshooting section above
-2. Search existing issues on GitHub
-3. Create a new issue with detailed information about your problem
-
----
-
-**Happy dataset collecting! 🎯📊**

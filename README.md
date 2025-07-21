@@ -6,6 +6,8 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)
 ![Browser](https://img.shields.io/badge/Browser-Chrome%2FFirefox%2FEdge-orange.svg)
 
+<img src="gui_capture_app.gif">
+
 ## ✨ Features
 
 ### 📸 Screen Capture

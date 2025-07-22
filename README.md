@@ -59,7 +59,7 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 
 - Modern web browser (Chrome, Firefox, Edge)
 
@@ -122,7 +122,7 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 
 **Bounding Boxes:**
 
-- Click "Draw Bounding Box" 
+- Click "Draw Bounding Box"
 
 - Click and drag on the screenshot to create a box around UI elements
 
@@ -179,7 +179,7 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 
 ### File Structure
 
-```
+```shell
 data/
 ├── annotations_coco.json    # Complete COCO dataset
 ├── frame_1.png             # Screenshot images
@@ -319,7 +319,7 @@ This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENS
 
 **"Server not running" error:**
 
-- Make sure you ran `npm start` 
+- Make sure you ran `npm start`
 - Check that port 3000 is not in use by another application
 - Ensure all dependencies are installed
 

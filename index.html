@@ -713,8 +713,17 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>Element Info</label>
-                    <input type="text" class="form-control" id="elementInfo" placeholder="e.g., button#submit, .menu-item">
+                    <label>Element Type</label>
+                    <select class="form-control" id="elementInfo">
+                        <option value="">Select element type</option>
+                        <option value="Icon">Icon</option>
+                        <option value="Menu Item">Menu Item</option>
+                        <option value="Radio Button">Radio Button</option>
+                        <option value="Text Input">Text Input</option>
+                        <option value="Slider">Slider</option>
+                        <option value="Checkbox">Checkbox</option>
+                        <option value="Button">Button</option>
+                    </select>
                 </div>
                 
                 <div class="form-group">
@@ -1179,7 +1188,7 @@
                     this.elements.sequencePosition.value = `${this.currentFrame.sequencePosition} of ${this.currentSequence.frames.length + 1}`;
                     if (previousAnnotation) {
                         const actionDesc = previousAnnotation.attributes.task_description || 
-                                         `${previousAnnotation.attributes.action_type} on ${previousAnnotation.attributes.element_info || 'element'}`;
+                                         `${previousAnnotation.attributes.action_type} on ${previousAnnotation.attributes.element_info || 'UI element'}`;
                         this.elements.previousAction.value = actionDesc;
                     } else {
                         this.elements.previousAction.value = 'None';
@@ -1368,13 +1377,12 @@
                 const absX = x * scaleX;
                 const absY = y * scaleY;
                 
-                // Create a small bbox around the click point and keypoints
+                // Create annotation with just keypoints (no bbox)
                 const annotation = {
                     id: this.nextAnnotationId++,
-                    bbox: [absX - 10, absY - 10, 20, 20],
                     keypoints: [absX, absY, 2],
                     category_id: 1,
-                    area: 400,
+                    area: 0,
                     iscrowd: 0,
                     attributes: {
                         task_description: '',
@@ -1407,10 +1415,13 @@
                     marker.style.top = (annotation.keypoints[1] * scaleY) + 'px';
                     marker.dataset.annotationId = annotation.id;
                     
-                    // Make marker clickable
+                    // Make marker clickable - use annotation ID to find current annotation
                     marker.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        this.selectAnnotation(annotation);
+                        const currentAnnotation = this.currentFrame.annotations.find(a => a.id === annotation.id);
+                        if (currentAnnotation) {
+                            this.selectAnnotation(currentAnnotation);
+                        }
                     });
                     
                     this.elements.screenshotContainer.appendChild(marker);
@@ -1430,10 +1441,13 @@
                     label.textContent = annotation.id;
                     bbox.appendChild(label);
                     
-                    // Make entire bbox clickable
+                    // Make entire bbox clickable - use annotation ID to find current annotation
                     bbox.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        this.selectAnnotation(annotation);
+                        const currentAnnotation = this.currentFrame.annotations.find(a => a.id === annotation.id);
+                        if (currentAnnotation) {
+                            this.selectAnnotation(currentAnnotation);
+                        }
                     });
                     
                     this.elements.screenshotContainer.appendChild(bbox);
@@ -1559,9 +1573,18 @@
             saveAnnotation() {
                 if (!this.selectedAnnotation) return;
                 
-                this.selectedAnnotation.attributes.task_description = this.elements.taskDescription.value;
-                this.selectedAnnotation.attributes.action_type = this.elements.actionType.value;
-                this.selectedAnnotation.attributes.element_info = this.elements.elementInfo.value;
+                // Find the current annotation in the frame's annotations array
+                const annotationIndex = this.currentFrame.annotations.findIndex(a => a.id === this.selectedAnnotation.id);
+                if (annotationIndex === -1) {
+                    this.updateStatus('Error: Annotation not found', 'error');
+                    return;
+                }
+                
+                // Update the annotation in the array
+                const annotation = this.currentFrame.annotations[annotationIndex];
+                annotation.attributes.task_description = this.elements.taskDescription.value;
+                annotation.attributes.action_type = this.elements.actionType.value;
+                annotation.attributes.element_info = this.elements.elementInfo.value;
                 
                 // Collect custom metadata
                 const customMetadata = {};
@@ -1573,7 +1596,7 @@
                         customMetadata[key] = value;
                     }
                 });
-                this.selectedAnnotation.attributes.custom_metadata = customMetadata;
+                annotation.attributes.custom_metadata = customMetadata;
                 
                 // Update category based on action type
                 const categoryMap = {
@@ -1585,10 +1608,27 @@
                     'right_click': 6,
                     'double_click': 7
                 };
-                this.selectedAnnotation.category_id = categoryMap[this.selectedAnnotation.attributes.action_type] || 1;
+                annotation.category_id = categoryMap[annotation.attributes.action_type] || 1;
                 
+                // Update the selected annotation reference
+                this.selectedAnnotation = annotation;
+                
+                // Update the annotation list to show the changes
                 this.updateAnnotationList();
-                this.updateStatus('Annotation saved');
+                
+                // Flash the save button to indicate success
+                const saveBtn = this.elements.saveAnnotationBtn;
+                const originalText = saveBtn.textContent;
+                const originalClass = saveBtn.className;
+                saveBtn.textContent = 'Saved!';
+                saveBtn.className = 'button success';
+                
+                setTimeout(() => {
+                    saveBtn.textContent = originalText;
+                    saveBtn.className = originalClass;
+                }, 1000);
+                
+                this.updateStatus(`Annotation ${annotation.id} saved successfully`);
             }
             
             deleteAnnotation(annotation) {
@@ -1715,7 +1755,7 @@
                         // Add actions to history
                         this.currentFrame.annotations.forEach(ann => {
                             const actionDesc = ann.attributes.task_description || 
-                                             `${ann.attributes.action_type} on ${ann.attributes.element_info || 'element'}`;
+                                             `${ann.attributes.action_type} on ${ann.attributes.element_info || 'UI element'}`;
                             this.sequenceHistory.push({
                                 frameId: this.currentFrame.id,
                                 action: actionDesc,

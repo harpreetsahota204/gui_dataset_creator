@@ -1284,7 +1284,11 @@
                 
                 try {
                     // Save image to server
-                    const imageFilename = `frame_${this.currentFrame.id}.png`;
+                    const timestamp = new Date(this.currentFrame.timestamp).toISOString()
+                        .replace(/:/g, '-')  // Replace colons with hyphens for valid filenames
+                        .replace(/\..+Z$/, '') // Remove milliseconds and Z
+                        .replace('T', '_');
+                        const imageFilename = `${timestamp}.png`;
                     const imageResponse = await fetch(`${this.serverUrl}/save-image`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

@@ -97,6 +97,16 @@
             background: #218838;
         }
 
+        .button.warning {
+            background: #ffc107;
+            color: #000;
+            border-color: #ffc107;
+        }
+
+        .button.warning:hover {
+            background: #e0a800;
+        }
+
         .button.active {
             background: #ffc107;
             color: #000;
@@ -479,6 +489,79 @@
                 border-top: 1px solid #e0e0e0;
             }
         }
+
+        .sequence-indicator {
+            display: inline-block;
+            padding: 6px 12px;
+            background: #28a745;
+            color: white;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+
+        .sequence-history {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        }
+
+        .history-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-item-number {
+            background: #007bff;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .history-item-action {
+            flex: 1;
+        }
+
+        .history-item-time {
+            color: #666;
+            font-size: 11px;
+        }
+
+        .sequence-info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #0c5460;
+        }
+
+        .sequence-metadata {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+        }
     </style>
 </head>
 <body>
@@ -487,10 +570,17 @@
             <div class="toolbar">
                 <button class="button primary" id="startStreamBtn">Start Live Capture</button>
                 <button class="button" id="captureFrameBtn" disabled>Capture Frame</button>
+                <button class="button warning" id="refreshStreamBtn" disabled title="Refresh stream (Ctrl+R / Cmd+R)">↻ Refresh Stream</button>
                 <button class="button" id="drawBboxBtn" disabled>Draw Bounding Box</button>
                 <button class="button" id="addPointBtn" disabled>Add Click Point</button>
                 <button class="button danger" id="stopStreamBtn" disabled>Stop Stream</button>
                 <button class="button success" id="loadDatasetBtn">Load Existing Dataset</button>
+                <div style="flex: 1;"></div>
+                <button class="button success" id="startSequenceBtn">Start Sequence</button>
+                <button class="button danger" id="endSequenceBtn" disabled>End Sequence</button>
+                <span id="sequenceIndicator" class="sequence-indicator" style="display: none;">
+                    Sequence: <span id="sequenceId"></span> (Frame <span id="sequenceFrameCount">0</span>)
+                </span>
             </div>
             
             <div class="preview-area" id="previewArea">
@@ -537,11 +627,26 @@
                     4. <strong>Click on bounding boxes/points to edit them</strong><br>
                     5. Add task descriptions and metadata per annotation<br>
                     6. Save frame to <code>data/</code> folder<br><br>
-                    <strong>Fixed Issues:</strong><br>
-                    • Annotations are now clickable and editable<br>
-                    • Task descriptions moved to annotation level<br>
-                    • Added image metadata (app/platform)<br>
+                    <strong>New Features:</strong><br>
+                    • <strong>Refresh Stream:</strong> Update screen capture without restarting<br>
+                    • Annotations are clickable and editable<br>
+                    • Task descriptions at annotation level<br>
+                    • Image metadata (app/platform)<br>
                     • Custom annotation metadata support
+                </div>
+            </div>
+
+            <div class="section" id="sequenceSection" style="display: none;">
+                <h3 class="section-title">Sequence Information</h3>
+                <div class="sequence-info" id="sequenceInfo">
+                    <strong>Sequence ID:</strong> <span id="currentSequenceId"></span><br>
+                    <strong>Frames in Sequence:</strong> <span id="currentSequenceFrames">0</span><br>
+                    <strong>Started:</strong> <span id="sequenceStartTime"></span>
+                </div>
+                
+                <h4 class="section-title">Action History</h4>
+                <div class="sequence-history" id="sequenceHistory">
+                    <div style="padding: 10px; color: #666; text-align: center;">No actions in sequence yet</div>
                 </div>
             </div>
 
@@ -565,6 +670,16 @@
                         <option value="Web">Web Browser</option>
                         <option value="Mobile">Mobile</option>
                     </select>
+                </div>
+                <div class="sequence-metadata" id="frameSequenceMetadata" style="display: none;">
+                    <div class="form-group">
+                        <label>Sequence Position</label>
+                        <input type="text" class="form-control" id="sequencePosition" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Previous Action</label>
+                        <input type="text" class="form-control" id="previousAction" readonly>
+                    </div>
                 </div>
             </div>
             
@@ -638,6 +753,12 @@
                 this.nextFrameId = 1;
                 this.nextAnnotationId = 1;
                 
+                // Sequence tracking
+                this.currentSequence = null;
+                this.sequenceHistory = [];
+                this.sequences = {};
+                this.nextSequenceId = 1;
+                
                 // COCO dataset structure
                 this.dataset = {
                     info: {
@@ -675,6 +796,7 @@
                 this.elements = {
                     startStreamBtn: document.getElementById('startStreamBtn'),
                     captureFrameBtn: document.getElementById('captureFrameBtn'),
+                    refreshStreamBtn: document.getElementById('refreshStreamBtn'),
                     drawBboxBtn: document.getElementById('drawBboxBtn'),
                     addPointBtn: document.getElementById('addPointBtn'),
                     stopStreamBtn: document.getElementById('stopStreamBtn'),
@@ -703,13 +825,29 @@
                     saveFrameBtn: document.getElementById('saveFrameBtn'),
                     fileStatus: document.getElementById('fileStatus'),
                     imageCount: document.getElementById('imageCount'),
-                    annotationCount: document.getElementById('annotationCount')
+                    annotationCount: document.getElementById('annotationCount'),
+                    // Sequence elements
+                    startSequenceBtn: document.getElementById('startSequenceBtn'),
+                    endSequenceBtn: document.getElementById('endSequenceBtn'),
+                    sequenceIndicator: document.getElementById('sequenceIndicator'),
+                    sequenceId: document.getElementById('sequenceId'),
+                    sequenceFrameCount: document.getElementById('sequenceFrameCount'),
+                    sequenceSection: document.getElementById('sequenceSection'),
+                    sequenceInfo: document.getElementById('sequenceInfo'),
+                    currentSequenceId: document.getElementById('currentSequenceId'),
+                    currentSequenceFrames: document.getElementById('currentSequenceFrames'),
+                    sequenceStartTime: document.getElementById('sequenceStartTime'),
+                    sequenceHistory: document.getElementById('sequenceHistory'),
+                    frameSequenceMetadata: document.getElementById('frameSequenceMetadata'),
+                    sequencePosition: document.getElementById('sequencePosition'),
+                    previousAction: document.getElementById('previousAction')
                 };
             }
             
             attachEventListeners() {
                 this.elements.startStreamBtn.addEventListener('click', () => this.startStream());
                 this.elements.captureFrameBtn.addEventListener('click', () => this.captureFrame());
+                this.elements.refreshStreamBtn.addEventListener('click', () => this.refreshStream());
                 this.elements.drawBboxBtn.addEventListener('click', () => this.toggleDrawMode());
                 this.elements.addPointBtn.addEventListener('click', () => this.togglePointMode());
                 this.elements.stopStreamBtn.addEventListener('click', () => this.stopStream());
@@ -719,6 +857,10 @@
                 this.elements.deleteAnnotationBtn.addEventListener('click', () => this.deleteSelectedAnnotation());
                 this.elements.saveFrameBtn.addEventListener('click', () => this.saveCurrentFrame());
                 this.elements.addMetadataBtn.addEventListener('click', () => this.addMetadataField());
+                
+                // Sequence events
+                this.elements.startSequenceBtn.addEventListener('click', () => this.startSequence());
+                this.elements.endSequenceBtn.addEventListener('click', () => this.endSequence());
                 
                 // Mouse events for drawing
                 this.elements.screenshot.addEventListener('mousedown', (e) => this.handleMouseDown(e));
@@ -734,8 +876,19 @@
                 
                 // Keyboard events
                 document.addEventListener('keydown', (e) => {
-                    if (e.key === 'Delete' && this.selectedAnnotation) {
+                    // Don't trigger shortcuts when typing in input fields
+                    const isTyping = e.target.tagName === 'INPUT' || 
+                                   e.target.tagName === 'TEXTAREA' || 
+                                   e.target.tagName === 'SELECT';
+                    
+                    if (e.key === 'Delete' && this.selectedAnnotation && !isTyping) {
                         this.deleteSelectedAnnotation();
+                    } else if (e.key === 'r' && (e.ctrlKey || e.metaKey) && !isTyping) {
+                        // Refresh stream with Ctrl+R (or Cmd+R on Mac)
+                        if (this.stream && !this.elements.refreshStreamBtn.disabled) {
+                            e.preventDefault();
+                            this.refreshStream();
+                        }
                     }
                 });
             }
@@ -769,11 +922,116 @@
                         
                         this.updateDatasetStats();
                         this.updateStatus(`Loaded existing dataset: ${this.dataset.images.length} images`);
+                        this.showFileStatus(`Successfully loaded ${this.dataset.images.length} images and ${this.dataset.annotations.length} annotations`, 'success');
+                    } else if (response.status === 404) {
+                        // No existing dataset found
+                        this.updateStatus('No existing dataset found - starting fresh');
+                        this.showFileStatus('No dataset file found at data/annotations_coco.json', 'error');
+                    } else {
+                        // Other error
+                        const error = await response.json();
+                        throw new Error(error.error || 'Failed to load dataset');
                     }
                 } catch (error) {
-                    // No existing dataset, start fresh
-                    console.log('Starting fresh dataset');
+                    // Network or other errors
+                    console.error('Error loading dataset:', error);
+                    this.updateStatus('Error loading dataset', 'error');
+                    this.showFileStatus(`Failed to load dataset: ${error.message}`, 'error');
                 }
+            }
+            
+            startSequence() {
+                if (this.currentSequence) {
+                    alert('A sequence is already in progress. End it first.');
+                    return;
+                }
+                
+                // Use a temporary ID that will be replaced with first frame's filename
+                const tempSequenceId = `temp_seq_${Date.now()}`;
+                this.currentSequence = {
+                    id: tempSequenceId,
+                    tempId: true, // Flag to indicate this needs to be replaced
+                    startTime: new Date().toISOString(),
+                    endTime: null,
+                    frames: [],
+                    totalActions: 0,
+                    description: '',
+                    firstFrameFilename: null // Will store the first frame's filename
+                };
+                
+                this.sequenceHistory = [];
+                this.sequences[tempSequenceId] = this.currentSequence;
+                
+                // Update UI
+                this.elements.startSequenceBtn.disabled = true;
+                this.elements.endSequenceBtn.disabled = false;
+                this.elements.sequenceIndicator.style.display = 'inline-block';
+                this.elements.sequenceId.textContent = 'Pending...'; // Show pending until first frame
+                this.elements.sequenceFrameCount.textContent = '0';
+                this.elements.sequenceSection.style.display = 'block';
+                this.elements.currentSequenceId.textContent = 'Will be set from first frame';
+                this.elements.currentSequenceFrames.textContent = '0';
+                this.elements.sequenceStartTime.textContent = new Date(this.currentSequence.startTime).toLocaleString();
+                
+                this.updateStatus('Started sequence - ID will be set from first frame');
+                this.updateSequenceHistory();
+            }
+            
+            endSequence() {
+                if (!this.currentSequence) return;
+                
+                const description = prompt('Enter a description for this sequence:');
+                if (description === null) return; // User cancelled
+                
+                this.currentSequence.endTime = new Date().toISOString();
+                this.currentSequence.description = description;
+                
+                // No need to add to dataset.sequences since we're storing at frame level
+                // Just save the dataset with updated frame information
+                this.saveDatasetToServer();
+                
+                // Reset UI
+                this.elements.startSequenceBtn.disabled = false;
+                this.elements.endSequenceBtn.disabled = true;
+                this.elements.sequenceIndicator.style.display = 'none';
+                this.elements.sequenceSection.style.display = 'none';
+                this.elements.frameSequenceMetadata.style.display = 'none';
+                
+                this.updateStatus(`Ended sequence ${this.currentSequence.id} with ${this.currentSequence.frames.length} frames`);
+                this.showFileStatus(`Sequence ${this.currentSequence.id} completed with ${this.currentSequence.frames.length} frames`, 'success');
+                
+                this.currentSequence = null;
+                this.sequenceHistory = [];
+            }
+            
+            updateSequenceHistory() {
+                const historyContainer = this.elements.sequenceHistory;
+                
+                if (this.sequenceHistory.length === 0) {
+                    historyContainer.innerHTML = '<div style="padding: 10px; color: #666; text-align: center;">No actions in sequence yet</div>';
+                    return;
+                }
+                
+                historyContainer.innerHTML = '';
+                this.sequenceHistory.forEach((item, index) => {
+                    const historyItem = document.createElement('div');
+                    historyItem.className = 'history-item';
+                    
+                    const time = new Date(item.timestamp).toLocaleTimeString();
+                    
+                    historyItem.innerHTML = `
+                        <div class="history-item-number">${index + 1}</div>
+                        <div class="history-item-action">
+                            <strong>${item.action}</strong>
+                            <div class="history-item-time">${time}</div>
+                        </div>
+                    `;
+                    
+                    historyContainer.appendChild(historyItem);
+                });
+                
+                // Scroll to bottom
+                historyContainer.scrollTop = historyContainer.scrollHeight;
             }
             
             async startStream() {
@@ -793,6 +1051,7 @@
                     // Enable/disable buttons
                     this.elements.startStreamBtn.disabled = true;
                     this.elements.captureFrameBtn.disabled = false;
+                    this.elements.refreshStreamBtn.disabled = false;
                     this.elements.stopStreamBtn.disabled = false;
                     
                     this.mode = 'streaming';
@@ -809,6 +1068,67 @@
                 }
             }
             
+            async refreshStream() {
+                if (!this.stream) return;
+                
+                // Don't refresh if we're in the middle of annotating
+                if (this.currentFrame && this.elements.screenshotContainer.style.display !== 'none') {
+                    if (!confirm('You have unsaved annotations. Refresh stream anyway?')) {
+                        return;
+                    }
+                }
+                
+                try {
+                    // Temporarily disable refresh button to prevent multiple clicks
+                    this.elements.refreshStreamBtn.disabled = true;
+                    this.updateStatus('Refreshing stream...');
+                    
+                    // Get current video track
+                    const videoTrack = this.stream.getVideoTracks()[0];
+                    if (videoTrack) {
+                        // Apply constraints to refresh the capture
+                        await videoTrack.applyConstraints({
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 },
+                            frameRate: { ideal: 30 }
+                        });
+                    }
+                    
+                    // Force video element to reload
+                    this.elements.videoStream.srcObject = null;
+                    await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+                    this.elements.videoStream.srcObject = this.stream;
+                    
+                    // Return to streaming view if we were annotating
+                    if (this.currentFrame) {
+                        this.elements.videoContainer.style.display = 'block';
+                        this.elements.screenshotContainer.style.display = 'none';
+                        this.elements.drawBboxBtn.disabled = true;
+                        this.elements.addPointBtn.disabled = true;
+                        this.elements.annotationForm.style.display = 'none';
+                        
+                        // Reset button states
+                        this.elements.drawBboxBtn.classList.remove('active');
+                        this.elements.addPointBtn.classList.remove('active');
+                        
+                        // Clear current frame
+                        this.currentFrame = null;
+                        this.selectedAnnotation = null;
+                        this.mode = 'streaming';
+                        this.updateModeIndicator('Streaming', 'streaming');
+                    }
+                    
+                    this.updateStatus('Stream refreshed successfully');
+                    
+                } catch (error) {
+                    console.error('Error refreshing stream:', error);
+                    this.updateStatus('Error refreshing stream: ' + error.message, 'error');
+                } finally {
+                    // Re-enable refresh button
+                    this.elements.refreshStreamBtn.disabled = false;
+                }
+            }
+            
             captureFrame() {
                 if (!this.stream) return;
                 
@@ -819,13 +1139,24 @@
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0);
                 
+                // Get the last complete annotation from sequence history
+                let previousAnnotation = null;
+                if (this.sequenceHistory.length > 0) {
+                    const lastHistory = this.sequenceHistory[this.sequenceHistory.length - 1];
+                    previousAnnotation = lastHistory.annotation || null;
+                }
+                
                 this.currentFrame = {
                     id: this.nextFrameId++,
                     dataUrl: canvas.toDataURL('image/png'),
                     width: canvas.width,
                     height: canvas.height,
                     timestamp: new Date().toISOString(),
-                    annotations: []
+                    annotations: [],
+                    // Add sequence metadata
+                    sequenceId: this.currentSequence ? this.currentSequence.id : null,
+                    sequencePosition: this.currentSequence ? this.currentSequence.frames.length + 1 : null,
+                    previousAnnotation: previousAnnotation // Store complete annotation object
                 };
                 
                 // Display the captured frame
@@ -841,6 +1172,21 @@
                 this.elements.frameId.value = `frame_${this.currentFrame.id}`;
                 this.updateStatus(`Frame ${this.currentFrame.id} captured - add annotations`);
                 this.updateModeIndicator('Annotating');
+                
+                // Update sequence metadata display
+                if (this.currentSequence) {
+                    this.elements.frameSequenceMetadata.style.display = 'block';
+                    this.elements.sequencePosition.value = `${this.currentFrame.sequencePosition} of ${this.currentSequence.frames.length + 1}`;
+                    if (previousAnnotation) {
+                        const actionDesc = previousAnnotation.attributes.task_description || 
+                                         `${previousAnnotation.attributes.action_type} on ${previousAnnotation.attributes.element_info || 'element'}`;
+                        this.elements.previousAction.value = actionDesc;
+                    } else {
+                        this.elements.previousAction.value = 'None';
+                    }
+                } else {
+                    this.elements.frameSequenceMetadata.style.display = 'none';
+                }
                 
                 // Clear previous annotations from display
                 this.clearAnnotationDisplay();
@@ -1283,12 +1629,34 @@
                 }
                 
                 try {
-                    // Save image to server
                     const timestamp = new Date(this.currentFrame.timestamp).toISOString()
                         .replace(/:/g, '-')  // Replace colons with hyphens for valid filenames
                         .replace(/\..+Z$/, '') // Remove milliseconds and Z
                         .replace('T', '_');
-                        const imageFilename = `${timestamp}.png`;
+                    const imageFilename = `${timestamp}.png`;
+                    
+                    // If this is the first frame in a sequence, update the sequence ID
+                    if (this.currentSequence && this.currentSequence.tempId && this.currentSequence.frames.length === 0) {
+                        const oldId = this.currentSequence.id;
+                        const newId = imageFilename.replace('.png', ''); // Use filename without extension as sequence ID
+                        
+                        // Update sequence object
+                        this.currentSequence.id = newId;
+                        this.currentSequence.tempId = false;
+                        this.currentSequence.firstFrameFilename = imageFilename;
+                        
+                        // Update sequences map
+                        delete this.sequences[oldId];
+                        this.sequences[newId] = this.currentSequence;
+                        
+                        // Update current frame's sequence ID
+                        this.currentFrame.sequenceId = newId;
+                        
+                        // Update UI
+                        this.elements.sequenceId.textContent = newId;
+                        this.elements.currentSequenceId.textContent = newId;
+                    }
+                    
                     const imageResponse = await fetch(`${this.serverUrl}/save-image`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1308,7 +1676,11 @@
                         height: this.currentFrame.height,
                         date_captured: this.currentFrame.timestamp,
                         application: this.elements.application.value || '',
-                        platform: this.elements.platform.value || ''
+                        platform: this.elements.platform.value || '',
+                        // Add sequence metadata to image
+                        sequence_id: this.currentFrame.sequenceId,
+                        sequence_position: this.currentFrame.sequencePosition,
+                        previous_annotation: this.currentFrame.previousAnnotation // Store complete annotation object
                     };
                     
                     // Add to dataset
@@ -1316,12 +1688,48 @@
                     
                     // Add annotations with proper image_id
                     this.currentFrame.annotations.forEach(ann => {
+                        // Don't spread the entire annotation object, construct it properly
                         const cocoAnnotation = {
-                            ...ann,
-                            image_id: this.currentFrame.id
+                            id: ann.id,
+                            image_id: this.currentFrame.id,  // This should reference the image, not the annotation
+                            category_id: ann.category_id,
+                            bbox: ann.bbox,
+                            area: ann.area,
+                            iscrowd: ann.iscrowd,
+                            attributes: ann.attributes
                         };
+                        
+                        // Only add keypoints if they exist
+                        if (ann.keypoints) {
+                            cocoAnnotation.keypoints = ann.keypoints;
+                        }
+                        
                         this.dataset.annotations.push(cocoAnnotation);
                     });
+                    
+                    // Update sequence if active
+                    if (this.currentSequence && this.currentFrame.sequenceId) {
+                        this.currentSequence.frames.push(this.currentFrame.id);
+                        this.currentSequence.totalActions += this.currentFrame.annotations.length;
+                        
+                        // Add actions to history
+                        this.currentFrame.annotations.forEach(ann => {
+                            const actionDesc = ann.attributes.task_description || 
+                                             `${ann.attributes.action_type} on ${ann.attributes.element_info || 'element'}`;
+                            this.sequenceHistory.push({
+                                frameId: this.currentFrame.id,
+                                action: actionDesc,
+                                actionType: ann.attributes.action_type,
+                                annotation: ann, // Store the full annotation object
+                                timestamp: new Date().toISOString()
+                            });
+                        });
+                        
+                        // Update UI
+                        this.elements.sequenceFrameCount.textContent = this.currentSequence.frames.length;
+                        this.elements.currentSequenceFrames.textContent = this.currentSequence.frames.length;
+                        this.updateSequenceHistory();
+                    }
                     
                     // Save updated dataset
                     await this.saveDatasetToServer();
@@ -1400,6 +1808,7 @@
                 this.elements.placeholder.style.display = 'block';
                 this.elements.startStreamBtn.disabled = false;
                 this.elements.captureFrameBtn.disabled = true;
+                this.elements.refreshStreamBtn.disabled = true;
                 this.elements.stopStreamBtn.disabled = true;
                 this.elements.drawBboxBtn.disabled = true;
                 this.elements.addPointBtn.disabled = true;
@@ -1408,6 +1817,9 @@
                 // Reset button states
                 this.elements.drawBboxBtn.classList.remove('active');
                 this.elements.addPointBtn.classList.remove('active');
+                
+                // Don't clear sequence data when stopping stream
+                // User might want to continue the sequence later
                 
                 this.mode = 'idle';
                 this.selectedAnnotation = null;

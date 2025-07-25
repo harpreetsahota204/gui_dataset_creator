@@ -1010,24 +1010,78 @@
                     return;
                 }
                 
-                // Find matching suggestions based on the entire input
+                // Split input into individual words for fuzzy matching
+                const searchWords = value.toLowerCase().split(/\s+/).filter(word => word.length > 0);
+                
+                // Find matching suggestions based on word matching
                 const suggestions = Array.from(this.taskDescriptions)
-                    .filter(desc => desc.toLowerCase().includes(value.toLowerCase()))
-                    .sort((a, b) => {
-                        // Prioritize exact matches at start
-                        const aStartsWith = a.toLowerCase().startsWith(value.toLowerCase());
-                        const bStartsWith = b.toLowerCase().startsWith(value.toLowerCase());
-                        if (aStartsWith && !bStartsWith) return -1;
-                        if (!aStartsWith && bStartsWith) return 1;
-                        return a.length - b.length; // Shorter first
+                    .map(desc => {
+                        const descLower = desc.toLowerCase();
+                        
+                        // Check if all search words are present in the description
+                        const matchedWords = searchWords.filter(word => descLower.includes(word));
+                        const matchRatio = matchedWords.length / searchWords.length;
+                        
+                        // Only include if all words match
+                        if (matchRatio === 1) {
+                            return {
+                                text: desc,
+                                score: this.calculateMatchScore(desc, value, searchWords)
+                            };
+                        }
+                        return null;
                     })
-                    .slice(0, 5); // Limit to 5 suggestions
+                    .filter(item => item !== null)
+                    .sort((a, b) => b.score - a.score) // Higher score first
+                    .slice(0, 5) // Limit to 5 suggestions
+                    .map(item => item.text);
                 
                 if (suggestions.length > 0) {
                     this.showAutocompleteSuggestions(suggestions, value);
                 } else {
                     this.hideAutocomplete();
                 }
+            }
+            
+            calculateMatchScore(description, originalInput, searchWords) {
+                const descLower = description.toLowerCase();
+                const inputLower = originalInput.toLowerCase();
+                let score = 0;
+                
+                // Bonus for exact substring match
+                if (descLower.includes(inputLower)) {
+                    score += 100;
+                }
+                
+                // Bonus for starting with the input
+                if (descLower.startsWith(inputLower)) {
+                    score += 200;
+                }
+                
+                // Bonus for word order preservation
+                let lastIndex = -1;
+                let orderBonus = 0;
+                for (const word of searchWords) {
+                    const wordIndex = descLower.indexOf(word, lastIndex + 1);
+                    if (wordIndex > lastIndex) {
+                        orderBonus += 10;
+                        lastIndex = wordIndex;
+                    }
+                }
+                score += orderBonus;
+                
+                // Bonus for word proximity (words closer together score higher)
+                if (searchWords.length > 1) {
+                    const positions = searchWords.map(word => descLower.indexOf(word));
+                    const maxDistance = Math.max(...positions) - Math.min(...positions);
+                    const proximityBonus = Math.max(0, 50 - maxDistance);
+                    score += proximityBonus;
+                }
+                
+                // Penalty for length (prefer shorter matches)
+                score -= description.length * 0.1;
+                
+                return score;
             }
             
             showAutocompleteSuggestions(suggestions, searchText) {

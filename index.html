@@ -562,6 +562,46 @@
             padding-top: 10px;
             border-top: 1px solid #ddd;
         }
+
+        .autocomplete-container {
+            position: relative;
+        }
+
+        .autocomplete-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 150px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .autocomplete-suggestion {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+
+        .autocomplete-suggestion:last-child {
+            border-bottom: none;
+        }
+
+        .autocomplete-suggestion:hover,
+        .autocomplete-suggestion.selected {
+            background: #f0f0f0;
+        }
+
+        .autocomplete-suggestion.selected {
+            background: #007bff;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -696,7 +736,10 @@
                 
                 <div class="form-group">
                     <label>Task Description</label>
-                    <textarea class="form-control" id="taskDescription" placeholder="Describe what this annotation represents..." rows="2"></textarea>
+                    <div class="autocomplete-container">
+                        <textarea class="form-control" id="taskDescription" placeholder="Describe what this annotation represents..." rows="2"></textarea>
+                        <div class="autocomplete-suggestions" id="taskDescriptionSuggestions"></div>
+                    </div>
                 </div>
                 
                 <div class="form-group">
@@ -769,6 +812,11 @@
                 this.sequences = {};
                 this.nextSequenceId = 1;
                 
+                // Autocomplete data
+                this.taskDescriptions = new Set();
+                this.autocompleteSelectedIndex = -1;
+                this.autocompleteVisible = false;
+                
                 // COCO dataset structure
                 this.dataset = {
                     info: {
@@ -836,6 +884,7 @@
                     fileStatus: document.getElementById('fileStatus'),
                     imageCount: document.getElementById('imageCount'),
                     annotationCount: document.getElementById('annotationCount'),
+                    taskDescriptionSuggestions: document.getElementById('taskDescriptionSuggestions'),
                     // Sequence elements
                     startSequenceBtn: document.getElementById('startSequenceBtn'),
                     endSequenceBtn: document.getElementById('endSequenceBtn'),
@@ -872,6 +921,9 @@
                 this.elements.startSequenceBtn.addEventListener('click', () => this.startSequence());
                 this.elements.endSequenceBtn.addEventListener('click', () => this.endSequence());
                 
+                // Autocomplete events
+                this.setupAutocomplete();
+                
                 // Mouse events for drawing
                 this.elements.screenshot.addEventListener('mousedown', (e) => this.handleMouseDown(e));
                 this.elements.screenshot.addEventListener('mousemove', (e) => this.handleMouseMove(e));
@@ -903,6 +955,166 @@
                 });
             }
             
+            setupAutocomplete() {
+                const textarea = this.elements.taskDescription;
+                const suggestionsContainer = this.elements.taskDescriptionSuggestions;
+                
+                // Handle input events
+                textarea.addEventListener('input', (e) => {
+                    this.handleAutocompleteInput(e);
+                });
+                
+                // Handle keyboard navigation
+                textarea.addEventListener('keydown', (e) => {
+                    if (this.autocompleteVisible) {
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            this.navigateAutocomplete(1);
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            this.navigateAutocomplete(-1);
+                        } else if (e.key === 'Tab' || e.key === 'Enter') {
+                            if (this.autocompleteSelectedIndex >= 0) {
+                                e.preventDefault();
+                                this.selectAutocompleteSuggestion();
+                            }
+                        } else if (e.key === 'Escape') {
+                            this.hideAutocomplete();
+                        }
+                    }
+                });
+                
+                // Hide suggestions when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!textarea.contains(e.target) && !suggestionsContainer.contains(e.target)) {
+                        this.hideAutocomplete();
+                    }
+                });
+                
+                // Handle textarea blur
+                textarea.addEventListener('blur', (e) => {
+                    // Delay hiding to allow clicking on suggestions
+                    setTimeout(() => {
+                        if (!suggestionsContainer.contains(document.activeElement)) {
+                            this.hideAutocomplete();
+                        }
+                    }, 150);
+                });
+            }
+            
+            handleAutocompleteInput(e) {
+                const value = e.target.value.trim();
+                
+                if (value.length < 2) {
+                    this.hideAutocomplete();
+                    return;
+                }
+                
+                // Find matching suggestions based on the entire input
+                const suggestions = Array.from(this.taskDescriptions)
+                    .filter(desc => desc.toLowerCase().includes(value.toLowerCase()))
+                    .sort((a, b) => {
+                        // Prioritize exact matches at start
+                        const aStartsWith = a.toLowerCase().startsWith(value.toLowerCase());
+                        const bStartsWith = b.toLowerCase().startsWith(value.toLowerCase());
+                        if (aStartsWith && !bStartsWith) return -1;
+                        if (!aStartsWith && bStartsWith) return 1;
+                        return a.length - b.length; // Shorter first
+                    })
+                    .slice(0, 5); // Limit to 5 suggestions
+                
+                if (suggestions.length > 0) {
+                    this.showAutocompleteSuggestions(suggestions, value);
+                } else {
+                    this.hideAutocomplete();
+                }
+            }
+            
+            showAutocompleteSuggestions(suggestions, searchText) {
+                const container = this.elements.taskDescriptionSuggestions;
+                container.innerHTML = '';
+                
+                suggestions.forEach((suggestion, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'autocomplete-suggestion';
+                    div.textContent = suggestion;
+                    
+                    // Highlight matching part - escape special regex characters
+                    const escapedSearchText = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`(${escapedSearchText})`, 'gi');
+                    div.innerHTML = suggestion.replace(regex, '<strong>$1</strong>');
+                    
+                    div.addEventListener('click', () => {
+                        this.autocompleteSelectedIndex = index;
+                        this.selectAutocompleteSuggestion();
+                    });
+                    
+                    container.appendChild(div);
+                });
+                
+                container.style.display = 'block';
+                this.autocompleteVisible = true;
+                this.autocompleteSelectedIndex = -1;
+            }
+            
+            navigateAutocomplete(direction) {
+                const suggestions = this.elements.taskDescriptionSuggestions.children;
+                if (suggestions.length === 0) return;
+                
+                // Remove previous selection
+                if (this.autocompleteSelectedIndex >= 0) {
+                    suggestions[this.autocompleteSelectedIndex].classList.remove('selected');
+                }
+                
+                // Update selection
+                this.autocompleteSelectedIndex += direction;
+                
+                if (this.autocompleteSelectedIndex < 0) {
+                    this.autocompleteSelectedIndex = suggestions.length - 1;
+                } else if (this.autocompleteSelectedIndex >= suggestions.length) {
+                    this.autocompleteSelectedIndex = 0;
+                }
+                
+                // Add new selection
+                suggestions[this.autocompleteSelectedIndex].classList.add('selected');
+                
+                // Scroll into view
+                suggestions[this.autocompleteSelectedIndex].scrollIntoView({
+                    block: 'nearest'
+                });
+            }
+            
+            selectAutocompleteSuggestion() {
+                const suggestions = this.elements.taskDescriptionSuggestions.children;
+                if (this.autocompleteSelectedIndex < 0 || this.autocompleteSelectedIndex >= suggestions.length) {
+                    return;
+                }
+                
+                const selectedText = suggestions[this.autocompleteSelectedIndex].textContent;
+                const textarea = this.elements.taskDescription;
+                
+                // Replace the entire textarea content with the selected suggestion
+                textarea.value = selectedText;
+                textarea.setSelectionRange(selectedText.length, selectedText.length);
+                textarea.focus();
+                
+                this.hideAutocomplete();
+            }
+            
+            setAnnotationInteractivity(enabled) {
+                // Enable/disable pointer events on existing annotations
+                const annotations = this.elements.screenshotContainer.querySelectorAll('.bbox-overlay, .annotation-marker');
+                annotations.forEach(annotation => {
+                    annotation.style.pointerEvents = enabled ? 'auto' : 'none';
+                });
+            }
+            
+            hideAutocomplete() {
+                this.elements.taskDescriptionSuggestions.style.display = 'none';
+                this.autocompleteVisible = false;
+                this.autocompleteSelectedIndex = -1;
+            }
+            
             async checkServerConnection() {
                 try {
                     const response = await fetch(`${this.serverUrl}/list-files`);
@@ -929,6 +1141,13 @@
                         if (this.dataset.annotations.length > 0) {
                             this.nextAnnotationId = Math.max(...this.dataset.annotations.map(ann => ann.id)) + 1;
                         }
+                        
+                        // Populate autocomplete with existing task descriptions
+                        this.dataset.annotations.forEach(ann => {
+                            if (ann.attributes && ann.attributes.task_description) {
+                                this.taskDescriptions.add(ann.attributes.task_description.trim());
+                            }
+                        });
                         
                         this.updateDatasetStats();
                         this.updateStatus(`Loaded existing dataset: ${this.dataset.images.length} images`);
@@ -1212,12 +1431,14 @@
                     this.mode = 'annotating';
                     this.elements.drawBboxBtn.classList.remove('active');
                     this.updateModeIndicator('Annotating');
+                    this.setAnnotationInteractivity(true);
                 } else {
                     this.mode = 'drawing';
                     this.elements.drawBboxBtn.classList.add('active');
                     this.elements.addPointBtn.classList.remove('active');
                     this.updateModeIndicator('Drawing Box', 'drawing');
                     this.updateStatus('Click and drag to draw bounding box');
+                    this.setAnnotationInteractivity(false);
                 }
             }
             
@@ -1226,12 +1447,14 @@
                     this.mode = 'annotating';
                     this.elements.addPointBtn.classList.remove('active');
                     this.updateModeIndicator('Annotating');
+                    this.setAnnotationInteractivity(true);
                 } else {
                     this.mode = 'pointing';
                     this.elements.addPointBtn.classList.add('active');
                     this.elements.drawBboxBtn.classList.remove('active');
                     this.updateModeIndicator('Adding Points', 'drawing');
                     this.updateStatus('Click to add interaction points');
+                    this.setAnnotationInteractivity(false);
                 }
             }
             
@@ -1285,6 +1508,7 @@
                 this.currentBbox.element.style.width = '0px';
                 this.currentBbox.element.style.height = '0px';
                 this.currentBbox.element.style.pointerEvents = 'none';
+                this.currentBbox.element.style.zIndex = '1001'; // Ensure it's above other annotations
                 
                 this.elements.screenshotContainer.appendChild(this.currentBbox.element);
             }
@@ -1583,9 +1807,15 @@
                 
                 // Update the annotation in the array
                 const annotation = this.currentFrame.annotations[annotationIndex];
-                annotation.attributes.task_description = this.elements.taskDescription.value;
+                const taskDesc = this.elements.taskDescription.value.trim();
+                annotation.attributes.task_description = taskDesc;
                 annotation.attributes.action_type = this.elements.actionType.value;
                 annotation.attributes.element_info = this.elements.elementInfo.value;
+                
+                // Add to autocomplete if not empty
+                if (taskDesc) {
+                    this.taskDescriptions.add(taskDesc);
+                }
                 
                 // Collect custom metadata
                 const customMetadata = {};

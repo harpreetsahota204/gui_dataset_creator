@@ -129,4 +129,4 @@ Create test sequences:
 5. Continue capturing frames...
 6. End sequence with description "Complete login workflow"
 
-All frames will share the same sequence_id and maintain the complete action history through the previous_annotation field. 
+All frames will share the same sequence_id and maintain the complete action history through the previous_annotation field.

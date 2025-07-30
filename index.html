@@ -132,7 +132,7 @@
             max-width: 100%;
             height: auto;
             display: block;
-            cursor: crosshair;
+            cursor: default;
         }
 
         .bbox-overlay {
@@ -1351,6 +1351,13 @@
                 annotations.forEach(annotation => {
                     annotation.style.pointerEvents = enabled ? 'auto' : 'none';
                 });
+                
+                // Also set the screenshot cursor appropriately
+                if (enabled) {
+                    this.elements.screenshot.style.cursor = 'default';
+                } else {
+                    this.elements.screenshot.style.cursor = 'crosshair';
+                }
             }
             
             hideAutocomplete() {
@@ -1892,6 +1899,10 @@
                     this.updateModeIndicator('Drawing Box', 'drawing');
                     this.updateStatus('Click and drag to draw bounding box');
                     this.setAnnotationInteractivity(false);
+                    // Clear any current selection to avoid confusion
+                    this.selectedAnnotation = null;
+                    this.elements.annotationForm.style.display = 'none';
+                    this.updateAnnotationList();
                 }
             }
             
@@ -1908,6 +1919,10 @@
                     this.updateModeIndicator('Adding Points', 'drawing');
                     this.updateStatus('Click to add interaction points');
                     this.setAnnotationInteractivity(false);
+                    // Clear any current selection to avoid confusion
+                    this.selectedAnnotation = null;
+                    this.elements.annotationForm.style.display = 'none';
+                    this.updateAnnotationList();
                 }
             }
             
@@ -2045,6 +2060,12 @@
                 this.currentFrame.annotations.push(annotation);
                 this.displayAnnotation(annotation);
                 this.updateAnnotationList();
+                
+                // Switch back to annotating mode and select the new annotation
+                this.mode = 'annotating';
+                this.elements.drawBboxBtn.classList.remove('active');
+                this.updateModeIndicator('Annotating');
+                this.setAnnotationInteractivity(true);
                 this.selectAnnotation(annotation);
                 
                 this.currentBbox = null;
@@ -2085,6 +2106,12 @@
                 this.currentFrame.annotations.push(annotation);
                 this.displayAnnotation(annotation);
                 this.updateAnnotationList();
+                
+                // Switch back to annotating mode and select the new annotation
+                this.mode = 'annotating';
+                this.elements.addPointBtn.classList.remove('active');
+                this.updateModeIndicator('Annotating');
+                this.setAnnotationInteractivity(true);
                 this.selectAnnotation(annotation);
                 
                 this.updateStatus('Click point added - fill in annotation details');
@@ -2114,6 +2141,9 @@
                         }
                     });
                     
+                    // Set appropriate pointer events based on current mode
+                    marker.style.pointerEvents = (this.mode === 'drawing' || this.mode === 'pointing') ? 'none' : 'auto';
+                    
                     this.elements.screenshotContainer.appendChild(marker);
                 } else {
                     // Display as bbox
@@ -2139,6 +2169,9 @@
                             this.selectAnnotation(currentAnnotation);
                         }
                     });
+                    
+                    // Set appropriate pointer events based on current mode
+                    bbox.style.pointerEvents = (this.mode === 'drawing' || this.mode === 'pointing') ? 'none' : 'auto';
                     
                     this.elements.screenshotContainer.appendChild(bbox);
                 }

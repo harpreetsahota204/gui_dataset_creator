@@ -614,7 +614,7 @@
                 <button class="button" id="drawBboxBtn" disabled>Draw Bounding Box</button>
                 <button class="button" id="addPointBtn" disabled>Add Click Point</button>
                 <button class="button danger" id="stopStreamBtn" disabled>Stop Stream</button>
-                <button class="button success" id="loadDatasetBtn">Load Existing Dataset</button>
+                <button class="button success" id="loadDatasetBtn">📁 Browse Dataset Folder</button>
                 <div style="flex: 1;"></div>
                 <button class="button success" id="startSequenceBtn">Start Sequence</button>
                 <button class="button danger" id="endSequenceBtn" disabled>End Sequence</button>
@@ -666,9 +666,10 @@
                     3. Click "Capture Frame" when ready<br>
                     4. <strong>Click on bounding boxes/points to edit them</strong><br>
                     5. Add task descriptions and metadata per annotation<br>
-                    6. Save frame to <code>data/</code> folder<br><br>
+                    6. Save frame to <code>data/</code> folder (or <code>sequence_data/</code> for sequences)<br><br>
                     <strong>New Features:</strong><br>
                     • <strong>Refresh Stream:</strong> Update screen capture without restarting<br>
+                    • <strong>Sequence Description:</strong> Define an overall description for the entire sequence<br>
                     • Annotations are clickable and editable<br>
                     • Task descriptions at annotation level<br>
                     • Image metadata (app/platform)<br>
@@ -682,6 +683,15 @@
                     <strong>Sequence ID:</strong> <span id="currentSequenceId"></span><br>
                     <strong>Frames in Sequence:</strong> <span id="currentSequenceFrames">0</span><br>
                     <strong>Started:</strong> <span id="sequenceStartTime"></span>
+                </div>
+                
+                <div class="form-group">
+                    <label>Sequence Description</label>
+                    <div class="autocomplete-container">
+                        <textarea class="form-control" id="sequenceTask" placeholder="Define the overall sequence description (e.g., 'Login to application', 'Create new document')..." rows="2"></textarea>
+                        <div class="autocomplete-suggestions" id="sequenceTaskSuggestions"></div>
+                    </div>
+                    <div class="keyboard-hint">This description will be stored with all annotations in the sequence</div>
                 </div>
                 
                 <h4 class="section-title">Action History</h4>
@@ -814,8 +824,11 @@
                 
                 // Autocomplete data
                 this.taskDescriptions = new Set();
+                this.sequenceTasks = new Set();
                 this.autocompleteSelectedIndex = -1;
                 this.autocompleteVisible = false;
+                this.sequenceTaskAutocompleteSelectedIndex = -1;
+                this.sequenceTaskAutocompleteVisible = false;
                 
                 // COCO dataset structure
                 this.dataset = {
@@ -899,7 +912,9 @@
                     sequenceHistory: document.getElementById('sequenceHistory'),
                     frameSequenceMetadata: document.getElementById('frameSequenceMetadata'),
                     sequencePosition: document.getElementById('sequencePosition'),
-                    previousAction: document.getElementById('previousAction')
+                    previousAction: document.getElementById('previousAction'),
+                    sequenceTask: document.getElementById('sequenceTask'),
+                    sequenceTaskSuggestions: document.getElementById('sequenceTaskSuggestions')
                 };
             }
             
@@ -923,6 +938,7 @@
                 
                 // Autocomplete events
                 this.setupAutocomplete();
+                this.setupSequenceTaskAutocomplete();
                 
                 // Mouse events for drawing
                 this.elements.screenshot.addEventListener('mousedown', (e) => this.handleMouseDown(e));
@@ -1155,6 +1171,180 @@
                 this.hideAutocomplete();
             }
             
+            setupSequenceTaskAutocomplete() {
+                const textarea = this.elements.sequenceTask;
+                const suggestionsContainer = this.elements.sequenceTaskSuggestions;
+                
+                // Handle input events
+                textarea.addEventListener('input', (e) => {
+                    this.handleSequenceTaskAutocompleteInput(e);
+                    // Update current sequence task when changed
+                    if (this.currentSequence) {
+                        this.currentSequence.task = e.target.value.trim();
+                    }
+                });
+                
+                // Handle keyboard navigation
+                textarea.addEventListener('keydown', (e) => {
+                    if (this.sequenceTaskAutocompleteVisible) {
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            this.navigateSequenceTaskAutocomplete(1);
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            this.navigateSequenceTaskAutocomplete(-1);
+                        } else if (e.key === 'Tab' || e.key === 'Enter') {
+                            if (this.sequenceTaskAutocompleteSelectedIndex >= 0) {
+                                e.preventDefault();
+                                this.selectSequenceTaskAutocompleteSuggestion();
+                            }
+                        } else if (e.key === 'Escape') {
+                            this.hideSequenceTaskAutocomplete();
+                        }
+                    }
+                });
+                
+                // Hide suggestions when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!textarea.contains(e.target) && !suggestionsContainer.contains(e.target)) {
+                        this.hideSequenceTaskAutocomplete();
+                    }
+                });
+                
+                // Handle textarea blur
+                textarea.addEventListener('blur', (e) => {
+                    // Delay hiding to allow clicking on suggestions
+                    setTimeout(() => {
+                        if (!suggestionsContainer.contains(document.activeElement)) {
+                            this.hideSequenceTaskAutocomplete();
+                        }
+                    }, 150);
+                });
+            }
+            
+            handleSequenceTaskAutocompleteInput(e) {
+                const value = e.target.value.trim();
+                
+                if (value.length < 2) {
+                    this.hideSequenceTaskAutocomplete();
+                    return;
+                }
+                
+                // Split input into individual words for fuzzy matching
+                const searchWords = value.toLowerCase().split(/\s+/).filter(word => word.length > 0);
+                
+                // Find matching suggestions based on word matching
+                const suggestions = Array.from(this.sequenceTasks)
+                    .map(task => {
+                        const taskLower = task.toLowerCase();
+                        
+                        // Check if all search words are present in the task
+                        const matchedWords = searchWords.filter(word => taskLower.includes(word));
+                        const matchRatio = matchedWords.length / searchWords.length;
+                        
+                        // Only include if all words match
+                        if (matchRatio === 1) {
+                            return {
+                                text: task,
+                                score: this.calculateMatchScore(task, value, searchWords)
+                            };
+                        }
+                        return null;
+                    })
+                    .filter(item => item !== null)
+                    .sort((a, b) => b.score - a.score) // Higher score first
+                    .slice(0, 5) // Limit to 5 suggestions
+                    .map(item => item.text);
+                
+                if (suggestions.length > 0) {
+                    this.showSequenceTaskAutocompleteSuggestions(suggestions, value);
+                } else {
+                    this.hideSequenceTaskAutocomplete();
+                }
+            }
+            
+            showSequenceTaskAutocompleteSuggestions(suggestions, searchText) {
+                const container = this.elements.sequenceTaskSuggestions;
+                container.innerHTML = '';
+                
+                suggestions.forEach((suggestion, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'autocomplete-suggestion';
+                    div.textContent = suggestion;
+                    
+                    // Highlight matching part - escape special regex characters
+                    const escapedSearchText = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`(${escapedSearchText})`, 'gi');
+                    div.innerHTML = suggestion.replace(regex, '<strong>$1</strong>');
+                    
+                    div.addEventListener('click', () => {
+                        this.sequenceTaskAutocompleteSelectedIndex = index;
+                        this.selectSequenceTaskAutocompleteSuggestion();
+                    });
+                    
+                    container.appendChild(div);
+                });
+                
+                container.style.display = 'block';
+                this.sequenceTaskAutocompleteVisible = true;
+                this.sequenceTaskAutocompleteSelectedIndex = -1;
+            }
+            
+            navigateSequenceTaskAutocomplete(direction) {
+                const suggestions = this.elements.sequenceTaskSuggestions.children;
+                if (suggestions.length === 0) return;
+                
+                // Remove previous selection
+                if (this.sequenceTaskAutocompleteSelectedIndex >= 0) {
+                    suggestions[this.sequenceTaskAutocompleteSelectedIndex].classList.remove('selected');
+                }
+                
+                // Update selection
+                this.sequenceTaskAutocompleteSelectedIndex += direction;
+                
+                if (this.sequenceTaskAutocompleteSelectedIndex < 0) {
+                    this.sequenceTaskAutocompleteSelectedIndex = suggestions.length - 1;
+                } else if (this.sequenceTaskAutocompleteSelectedIndex >= suggestions.length) {
+                    this.sequenceTaskAutocompleteSelectedIndex = 0;
+                }
+                
+                // Add new selection
+                suggestions[this.sequenceTaskAutocompleteSelectedIndex].classList.add('selected');
+                
+                // Scroll into view
+                suggestions[this.sequenceTaskAutocompleteSelectedIndex].scrollIntoView({
+                    block: 'nearest'
+                });
+            }
+            
+            selectSequenceTaskAutocompleteSuggestion() {
+                const suggestions = this.elements.sequenceTaskSuggestions.children;
+                if (this.sequenceTaskAutocompleteSelectedIndex < 0 || this.sequenceTaskAutocompleteSelectedIndex >= suggestions.length) {
+                    return;
+                }
+                
+                const selectedText = suggestions[this.sequenceTaskAutocompleteSelectedIndex].textContent;
+                const textarea = this.elements.sequenceTask;
+                
+                // Replace the entire textarea content with the selected suggestion
+                textarea.value = selectedText;
+                textarea.setSelectionRange(selectedText.length, selectedText.length);
+                textarea.focus();
+                
+                // Update current sequence task
+                if (this.currentSequence) {
+                    this.currentSequence.task = selectedText;
+                }
+                
+                this.hideSequenceTaskAutocomplete();
+            }
+            
+            hideSequenceTaskAutocomplete() {
+                this.elements.sequenceTaskSuggestions.style.display = 'none';
+                this.sequenceTaskAutocompleteVisible = false;
+                this.sequenceTaskAutocompleteSelectedIndex = -1;
+            }
+            
             setAnnotationInteractivity(enabled) {
                 // Enable/disable pointer events on existing annotations
                 const annotations = this.elements.screenshotContainer.querySelectorAll('.bbox-overlay, .annotation-marker');
@@ -1173,7 +1363,7 @@
                 try {
                     const response = await fetch(`${this.serverUrl}/list-files`);
                     if (response.ok) {
-                        this.updateStatus('Server connected - files will save to data/ folder');
+                        this.updateStatus('Server connected - files will save to data/ or sequence_data/ folder');
                     }
                 } catch (error) {
                     this.updateStatus('Server not running - start with: npm start', 'error');
@@ -1183,50 +1373,260 @@
             
             async loadExistingDataset() {
                 try {
-                    const response = await fetch(`${this.serverUrl}/load-dataset`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        this.dataset = data;
-                        
-                        // Update IDs to continue from existing data
-                        if (this.dataset.images.length > 0) {
-                            this.nextFrameId = Math.max(...this.dataset.images.map(img => img.id)) + 1;
-                        }
-                        if (this.dataset.annotations.length > 0) {
-                            this.nextAnnotationId = Math.max(...this.dataset.annotations.map(ann => ann.id)) + 1;
-                        }
-                        
-                        // Populate autocomplete with existing task descriptions
-                        this.dataset.annotations.forEach(ann => {
-                            if (ann.attributes && ann.attributes.task_description) {
-                                this.taskDescriptions.add(ann.attributes.task_description.trim());
-                            }
-                        });
-                        
-                        this.updateDatasetStats();
-                        this.updateStatus(`Loaded existing dataset: ${this.dataset.images.length} images`);
-                        this.showFileStatus(`Successfully loaded ${this.dataset.images.length} images and ${this.dataset.annotations.length} annotations`, 'success');
-                    } else if (response.status === 404) {
-                        // No existing dataset found
-                        this.updateStatus('No existing dataset found - starting fresh');
-                        this.showFileStatus('No dataset file found at data/annotations_coco.json', 'error');
+                    // Try to use the modern File System Access API first
+                    if ('showDirectoryPicker' in window) {
+                        await this.loadDatasetWithDirectoryPicker();
                     } else {
-                        // Other error
-                        const error = await response.json();
-                        throw new Error(error.error || 'Failed to load dataset');
+                        // Fallback to file input method for older browsers
+                        await this.loadDatasetWithFileInput();
                     }
                 } catch (error) {
-                    // Network or other errors
+                    if (error.name === 'AbortError') {
+                        // User cancelled the dialog
+                        this.updateStatus('Dataset loading cancelled');
+                        return;
+                    }
+                    
                     console.error('Error loading dataset:', error);
                     this.updateStatus('Error loading dataset', 'error');
                     this.showFileStatus(`Failed to load dataset: ${error.message}`, 'error');
                 }
             }
             
+            async loadDatasetWithDirectoryPicker() {
+                // Use the modern File System Access API
+                const directoryHandle = await window.showDirectoryPicker({
+                    mode: 'read'
+                });
+                
+                // Scan the selected directory for JSON files
+                const jsonFiles = [];
+                const imageFiles = [];
+                
+                for await (const [name, handle] of directoryHandle.entries()) {
+                    if (handle.kind === 'file') {
+                        if (name.endsWith('.json')) {
+                            jsonFiles.push({ name, handle });
+                        } else if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg')) {
+                            imageFiles.push(name);
+                        }
+                    }
+                }
+                
+                if (jsonFiles.length === 0) {
+                    alert('Selected folder contains no JSON annotation files.');
+                    return;
+                }
+                
+                // Let user choose JSON file if multiple exist
+                let selectedJsonFile;
+                if (jsonFiles.length === 1) {
+                    selectedJsonFile = jsonFiles[0];
+                } else {
+                    const fileNames = jsonFiles.map(f => f.name);
+                    const selection = await this.showFileSelectionDialog(fileNames, directoryHandle.name);
+                    if (selection === null) return;
+                    selectedJsonFile = jsonFiles[selection];
+                }
+                
+                // Read the selected JSON file
+                const file = await selectedJsonFile.handle.getFile();
+                const content = await file.text();
+                const data = JSON.parse(content);
+                
+                await this.loadDatasetFromData(data, directoryHandle.name, selectedJsonFile.name);
+            }
+            
+            async loadDatasetWithFileInput() {
+                // Create a hidden file input for folder selection
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.webkitdirectory = true; // Allow folder selection
+                input.multiple = true;
+                input.accept = '.json,image/*';
+                
+                return new Promise((resolve, reject) => {
+                    input.onchange = async (e) => {
+                        try {
+                            const files = Array.from(e.target.files);
+                            
+                            // Filter JSON and image files
+                            const jsonFiles = files.filter(f => f.name.endsWith('.json'));
+                            const imageFiles = files.filter(f => 
+                                f.name.endsWith('.png') || f.name.endsWith('.jpg') || f.name.endsWith('.jpeg')
+                            );
+                            
+                            if (jsonFiles.length === 0) {
+                                alert('Selected folder contains no JSON annotation files.');
+                                resolve();
+                                return;
+                            }
+                            
+                            // Get folder name from the first file's path
+                            const folderName = files[0].webkitRelativePath.split('/')[0];
+                            
+                            // Let user choose JSON file if multiple exist
+                            let selectedJsonFile;
+                            if (jsonFiles.length === 1) {
+                                selectedJsonFile = jsonFiles[0];
+                            } else {
+                                const fileNames = jsonFiles.map(f => f.name);
+                                const selection = await this.showFileSelectionDialog(fileNames, folderName);
+                                if (selection === null) {
+                                    resolve();
+                                    return;
+                                }
+                                selectedJsonFile = jsonFiles[selection];
+                            }
+                            
+                            // Read the selected JSON file
+                            const content = await selectedJsonFile.text();
+                            const data = JSON.parse(content);
+                            
+                            await this.loadDatasetFromData(data, folderName, selectedJsonFile.name);
+                            resolve();
+                        } catch (error) {
+                            reject(error);
+                        }
+                    };
+                    
+                    input.oncancel = () => {
+                        resolve(); // User cancelled
+                    };
+                    
+                    // Trigger the file dialog
+                    input.click();
+                });
+            }
+            
+            async showFileSelectionDialog(fileNames, folderName) {
+                return new Promise((resolve) => {
+                    // Create a modal dialog
+                    const modal = document.createElement('div');
+                    modal.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.5);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 10000;
+                    `;
+                    
+                    const dialog = document.createElement('div');
+                    dialog.style.cssText = `
+                        background: white;
+                        padding: 20px;
+                        border-radius: 8px;
+                        max-width: 500px;
+                        width: 90%;
+                        max-height: 80%;
+                        overflow-y: auto;
+                    `;
+                    
+                    dialog.innerHTML = `
+                        <h3>Select Annotation File</h3>
+                        <p>Multiple JSON files found in <strong>${folderName}</strong>:</p>
+                        <div style="margin: 15px 0;">
+                            ${fileNames.map((name, idx) => `
+                                <label style="display: block; margin: 8px 0; cursor: pointer;">
+                                    <input type="radio" name="jsonFile" value="${idx}" style="margin-right: 8px;">
+                                    ${name}
+                                </label>
+                            `).join('')}
+                        </div>
+                        <div style="text-align: right; margin-top: 20px;">
+                            <button id="cancelBtn" style="margin-right: 10px; padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">Cancel</button>
+                            <button id="selectBtn" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Select</button>
+                        </div>
+                    `;
+                    
+                    modal.appendChild(dialog);
+                    document.body.appendChild(modal);
+                    
+                    const selectBtn = dialog.querySelector('#selectBtn');
+                    const cancelBtn = dialog.querySelector('#cancelBtn');
+                    
+                    const cleanup = () => {
+                        document.body.removeChild(modal);
+                    };
+                    
+                    selectBtn.onclick = () => {
+                        const selected = dialog.querySelector('input[name="jsonFile"]:checked');
+                        cleanup();
+                        resolve(selected ? parseInt(selected.value) : null);
+                    };
+                    
+                    cancelBtn.onclick = () => {
+                        cleanup();
+                        resolve(null);
+                    };
+                    
+                    // Close on backdrop click
+                    modal.onclick = (e) => {
+                        if (e.target === modal) {
+                            cleanup();
+                            resolve(null);
+                        }
+                    };
+                });
+            }
+            
+            async loadDatasetFromData(data, folderName, fileName) {
+                this.dataset = data;
+                
+                // Update IDs to continue from existing data
+                if (this.dataset.images.length > 0) {
+                    this.nextFrameId = Math.max(...this.dataset.images.map(img => img.id)) + 1;
+                }
+                if (this.dataset.annotations.length > 0) {
+                    this.nextAnnotationId = Math.max(...this.dataset.annotations.map(ann => ann.id)) + 1;
+                }
+                
+                // Populate autocomplete with existing task descriptions and sequence tasks
+                this.dataset.annotations.forEach(ann => {
+                    if (ann.attributes && ann.attributes.task_description) {
+                        this.taskDescriptions.add(ann.attributes.task_description.trim());
+                    }
+                });
+                
+                // Extract unique sequence descriptions from images
+                this.dataset.images.forEach(img => {
+                    // Handle new format (sequence_description) and old format (sequence_task)
+                    const sequenceDesc = img.sequence_description || img.sequence_task;
+                    if (sequenceDesc && sequenceDesc.trim()) {
+                        this.sequenceTasks.add(sequenceDesc.trim());
+                    } else if (img.sequence_id) {
+                        // Fallback: Try to find sequence_description from annotations
+                        const imageAnnotations = this.dataset.annotations.filter(ann => ann.image_id === img.id);
+                        if (imageAnnotations.length > 0 && imageAnnotations[0].attributes.sequence_description) {
+                            this.sequenceTasks.add(imageAnnotations[0].attributes.sequence_description.trim());
+                        }
+                    }
+                });
+                
+                this.updateDatasetStats();
+                const filePath = `${folderName}/${fileName}`;
+                this.updateStatus(`Loaded dataset from ${folderName}: ${this.dataset.images.length} images`);
+                this.showFileStatus(`Successfully loaded ${this.dataset.images.length} images and ${this.dataset.annotations.length} annotations from ${filePath}`, 'success');
+            }
+            
             startSequence() {
                 if (this.currentSequence) {
                     alert('A sequence is already in progress. End it first.');
                     return;
+                }
+                
+                // Prompt for sequence task
+                const task = prompt('Enter the overall description for this sequence (e.g., "Login to application", "Create new document"):');
+                if (task === null) return; // User cancelled
+                
+                const taskTrimmed = task.trim();
+                if (taskTrimmed) {
+                    this.sequenceTasks.add(taskTrimmed);
                 }
                 
                 // Use a temporary ID that will be replaced with first frame's filename
@@ -1239,6 +1639,7 @@
                     frames: [],
                     totalActions: 0,
                     description: '',
+                    task: taskTrimmed,
                     firstFrameFilename: null // Will store the first frame's filename
                 };
                 
@@ -1255,6 +1656,7 @@
                 this.elements.currentSequenceId.textContent = 'Will be set from first frame';
                 this.elements.currentSequenceFrames.textContent = '0';
                 this.elements.sequenceStartTime.textContent = new Date(this.currentSequence.startTime).toLocaleString();
+                this.elements.sequenceTask.value = taskTrimmed;
                 
                 this.updateStatus('Started sequence - ID will be set from first frame');
                 this.updateSequenceHistory();
@@ -1263,15 +1665,11 @@
             endSequence() {
                 if (!this.currentSequence) return;
                 
-                const description = prompt('Enter a description for this sequence:');
-                if (description === null) return; // User cancelled
-                
                 this.currentSequence.endTime = new Date().toISOString();
-                this.currentSequence.description = description;
                 
                 // No need to add to dataset.sequences since we're storing at frame level
                 // Just save the dataset with updated frame information
-                this.saveDatasetToServer();
+                this.saveDatasetToServer(true);
                 
                 // Reset UI
                 this.elements.startSequenceBtn.disabled = false;
@@ -1279,6 +1677,7 @@
                 this.elements.sequenceIndicator.style.display = 'none';
                 this.elements.sequenceSection.style.display = 'none';
                 this.elements.frameSequenceMetadata.style.display = 'none';
+                this.elements.sequenceTask.value = '';
                 
                 this.updateStatus(`Ended sequence ${this.currentSequence.id} with ${this.currentSequence.frames.length} frames`);
                 this.showFileStatus(`Sequence ${this.currentSequence.id} completed with ${this.currentSequence.frames.length} frames`, 'success');
@@ -1630,10 +2029,16 @@
                     area: bbox[2] * bbox[3],
                     iscrowd: 0,
                     attributes: {
-                        task_description: '',
+                        task_description: '', // Let user add individual action description
                         action_type: 'click',
                         element_info: '',
-                        custom_metadata: {}
+                        custom_metadata: {},
+                        // Reference-based approach for previous annotations
+                        previous_annotation_id: this.currentFrame.previousAnnotation ? this.currentFrame.previousAnnotation.id : null,
+                        previous_step_position: this.currentSequence ? this.currentSequence.frames.length : null,
+                        previous_action_type: this.currentFrame.previousAnnotation ? this.currentFrame.previousAnnotation.attributes.action_type : null,
+                        previous_element_type: this.currentFrame.previousAnnotation ? this.currentFrame.previousAnnotation.attributes.element_info : null,
+                        steps_since_start: this.currentSequence ? this.currentSequence.frames.length + 1 : 1
                     }
                 };
                 
@@ -1664,10 +2069,16 @@
                     area: 0,
                     iscrowd: 0,
                     attributes: {
-                        task_description: '',
+                        task_description: '', // Let user add individual action description
                         action_type: 'click',
                         element_info: '',
-                        custom_metadata: {}
+                        custom_metadata: {},
+                        // Reference-based approach for previous annotations
+                        previous_annotation_id: this.currentFrame.previousAnnotation ? this.currentFrame.previousAnnotation.id : null,
+                        previous_step_position: this.currentSequence ? this.currentSequence.frames.length : null,
+                        previous_action_type: this.currentFrame.previousAnnotation ? this.currentFrame.previousAnnotation.attributes.action_type : null,
+                        previous_element_type: this.currentFrame.previousAnnotation ? this.currentFrame.previousAnnotation.attributes.element_info : null,
+                        steps_since_start: this.currentSequence ? this.currentSequence.frames.length + 1 : 1
                     }
                 };
                 
@@ -1960,6 +2371,10 @@
                         .replace('T', '_');
                     const imageFilename = `${timestamp}.png`;
                     
+                    // Determine folder based on whether we're in a sequence
+                    const isInSequence = this.currentSequence && this.currentFrame.sequenceId;
+                    const folder = isInSequence ? 'sequence_data' : 'data';
+                    
                     // If this is the first frame in a sequence, update the sequence ID
                     if (this.currentSequence && this.currentSequence.tempId && this.currentSequence.frames.length === 0) {
                         const oldId = this.currentSequence.id;
@@ -1987,7 +2402,8 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             filename: imageFilename,
-                            data: this.currentFrame.dataUrl
+                            data: this.currentFrame.dataUrl,
+                            folder: folder
                         })
                     });
                     
@@ -2002,10 +2418,10 @@
                         date_captured: this.currentFrame.timestamp,
                         application: this.elements.application.value || '',
                         platform: this.elements.platform.value || '',
-                        // Add sequence metadata to image
+                        // Add sequence metadata to image (FiftyOne optimized)
                         sequence_id: this.currentFrame.sequenceId,
                         sequence_position: this.currentFrame.sequencePosition,
-                        previous_annotation: this.currentFrame.previousAnnotation // Store complete annotation object
+                        sequence_description: this.currentSequence ? this.currentSequence.task : null
                     };
                     
                     // Add to dataset
@@ -2057,7 +2473,7 @@
                     }
                     
                     // Save updated dataset
-                    await this.saveDatasetToServer();
+                    await this.saveDatasetToServer(isInSequence);
                     
                     // Save frame to local array
                     this.frames.push(this.currentFrame);
@@ -2076,7 +2492,7 @@
                     this.elements.drawBboxBtn.classList.remove('active');
                     this.elements.addPointBtn.classList.remove('active');
                     
-                    this.showFileStatus(`Frame ${this.currentFrame.id} saved to data/${imageFilename}`, 'success');
+                    this.showFileStatus(`Frame ${this.currentFrame.id} saved to ${folder}/${imageFilename}`, 'success');
                     this.updateStatus(`Frame ${this.currentFrame.id} saved with ${this.currentFrame.annotations.length} annotations`);
                     this.updateModeIndicator('Streaming', 'streaming');
                     
@@ -2098,13 +2514,17 @@
                 }
             }
             
-            async saveDatasetToServer() {
+            async saveDatasetToServer(isSequence = false) {
+                const folder = isSequence ? 'sequence_data' : 'data';
+                const filename = isSequence ? 'sequence_annotations_coco.json' : 'annotations_coco.json';
+                
                 const response = await fetch(`${this.serverUrl}/save-json`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        filename: 'annotations_coco.json',
-                        data: this.dataset
+                        filename: filename,
+                        data: this.dataset,
+                        folder: folder
                     })
                 });
                 
@@ -2114,8 +2534,17 @@
             
             async exportDataset() {
                 try {
-                    await this.saveDatasetToServer();
-                    this.showFileStatus('Dataset exported to data/annotations_coco.json', 'success');
+                    // Check if we have sequence data by looking for sequence_id in images
+                    const hasSequenceData = this.dataset.images.some(img => img.sequence_id);
+                    
+                    if (hasSequenceData) {
+                        await this.saveDatasetToServer(true);
+                        this.showFileStatus('Dataset exported to sequence_data/sequence_annotations_coco.json', 'success');
+                    } else {
+                        await this.saveDatasetToServer(false);
+                        this.showFileStatus('Dataset exported to data/annotations_coco.json', 'success');
+                    }
+                    
                     this.updateStatus(`Dataset exported: ${this.dataset.images.length} images, ${this.dataset.annotations.length} annotations`);
                 } catch (error) {
                     this.showFileStatus(`Export error: ${error.message}`, 'error');

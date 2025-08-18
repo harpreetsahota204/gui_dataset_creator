@@ -602,6 +602,136 @@
             background: #007bff;
             color: white;
         }
+
+        .sample-browser {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .sample-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sample-item:hover {
+            background: #f8f9fa;
+        }
+
+        .sample-item.selected {
+            background: #e3f2fd;
+            border-left: 3px solid #007bff;
+        }
+
+        .sample-item:last-child {
+            border-bottom: none;
+        }
+
+        .sample-thumbnail {
+            width: 60px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+        }
+
+        .sample-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .sample-title {
+            font-weight: 500;
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+
+        .sample-meta {
+            font-size: 11px;
+            color: #666;
+            display: flex;
+            gap: 8px;
+        }
+
+        .sample-badge {
+            display: inline-block;
+            padding: 1px 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            font-size: 10px;
+        }
+
+        .sample-badge.sequence {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .navigation-controls {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+
+        .navigation-controls .button {
+            flex: 1;
+            padding: 6px 8px;
+            font-size: 12px;
+        }
+
+        .mode-toggle {
+            display: flex;
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .mode-toggle button {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .mode-toggle button.active {
+            background: #007bff;
+            color: white;
+        }
+
+        .mode-toggle button:not(.active):hover {
+            background: #e9ecef;
+        }
+
+        .sample-filter {
+            margin-bottom: 10px;
+        }
+
+        .sample-filter input {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .sample-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 10px;
+            padding: 5px 0;
+        }
     </style>
 </head>
 <body>
@@ -644,6 +774,14 @@
         
         <div class="side-panel">
             <div class="section">
+                <h3 class="section-title">Mode</h3>
+                <div class="mode-toggle">
+                    <button id="captureModeBtn" class="active">Live Capture</button>
+                    <button id="reviewModeBtn">Review/Edit</button>
+                </div>
+            </div>
+
+            <div class="section">
                 <h3 class="section-title">Dataset Statistics</h3>
                 <div class="dataset-stats">
                     <div class="stat-card">
@@ -654,6 +792,20 @@
                         <div class="stat-number" id="annotationCount">0</div>
                         <div class="stat-label">Annotations</div>
                     </div>
+                </div>
+            </div>
+
+            <div class="section" id="sampleBrowserSection" style="display: none;">
+                <h3 class="section-title">Sample Navigation</h3>
+                
+                <div class="sample-stats">
+                    <span id="currentSamplePosition">-</span>
+                    <span id="totalSamples">0 samples</span>
+                </div>
+                
+                <div class="navigation-controls">
+                    <button class="button" id="prevSampleBtn" disabled>← Previous Sample</button>
+                    <button class="button" id="nextSampleBtn" disabled>Next Sample →</button>
                 </div>
             </div>
 
@@ -816,6 +968,12 @@
                 this.nextFrameId = 1;
                 this.nextAnnotationId = 1;
                 
+                // Sample navigation properties
+                this.appMode = 'capture'; // 'capture' or 'review'
+                this.currentSampleIndex = -1;
+                this.filteredSamples = [];
+                this.loadedSampleCache = new Map(); // Cache for loaded sample images
+                
                 // Sequence tracking
                 this.currentSequence = null;
                 this.sequenceHistory = [];
@@ -914,7 +1072,15 @@
                     sequencePosition: document.getElementById('sequencePosition'),
                     previousAction: document.getElementById('previousAction'),
                     sequenceTask: document.getElementById('sequenceTask'),
-                    sequenceTaskSuggestions: document.getElementById('sequenceTaskSuggestions')
+                    sequenceTaskSuggestions: document.getElementById('sequenceTaskSuggestions'),
+                    // Sample browser elements
+                    captureModeBtn: document.getElementById('captureModeBtn'),
+                    reviewModeBtn: document.getElementById('reviewModeBtn'),
+                    sampleBrowserSection: document.getElementById('sampleBrowserSection'),
+                    prevSampleBtn: document.getElementById('prevSampleBtn'),
+                    nextSampleBtn: document.getElementById('nextSampleBtn'),
+                    currentSamplePosition: document.getElementById('currentSamplePosition'),
+                    totalSamples: document.getElementById('totalSamples')
                 };
             }
             
@@ -935,6 +1101,12 @@
                 // Sequence events
                 this.elements.startSequenceBtn.addEventListener('click', () => this.startSequence());
                 this.elements.endSequenceBtn.addEventListener('click', () => this.endSequence());
+                
+                // Sample browser events
+                this.elements.captureModeBtn.addEventListener('click', () => this.switchMode('capture'));
+                this.elements.reviewModeBtn.addEventListener('click', () => this.switchMode('review'));
+                this.elements.prevSampleBtn.addEventListener('click', () => this.navigateToSample(-1));
+                this.elements.nextSampleBtn.addEventListener('click', () => this.navigateToSample(1));
                 
                 // Autocomplete events
                 this.setupAutocomplete();
@@ -966,6 +1138,15 @@
                         if (this.stream && !this.elements.refreshStreamBtn.disabled) {
                             e.preventDefault();
                             this.refreshStream();
+                        }
+                    } else if (this.appMode === 'review' && !isTyping) {
+                        // Sample navigation keyboard shortcuts
+                        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            this.navigateToSample(-1);
+                        } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            this.navigateToSample(1);
                         }
                     }
                 });
@@ -2058,6 +2239,22 @@
                 };
                 
                 this.currentFrame.annotations.push(annotation);
+                
+                // In review mode, also add to dataset
+                if (this.appMode === 'review') {
+                    const cocoAnnotation = {
+                        id: annotation.id,
+                        image_id: this.currentFrame.id,
+                        category_id: annotation.category_id,
+                        bbox: annotation.bbox,
+                        area: annotation.area,
+                        iscrowd: annotation.iscrowd,
+                        attributes: annotation.attributes
+                    };
+                    this.dataset.annotations.push(cocoAnnotation);
+                    this.updateDatasetStats();
+                }
+                
                 this.displayAnnotation(annotation);
                 this.updateAnnotationList();
                 
@@ -2104,6 +2301,22 @@
                 };
                 
                 this.currentFrame.annotations.push(annotation);
+                
+                // In review mode, also add to dataset
+                if (this.appMode === 'review') {
+                    const cocoAnnotation = {
+                        id: annotation.id,
+                        image_id: this.currentFrame.id,
+                        category_id: annotation.category_id,
+                        keypoints: annotation.keypoints,
+                        area: annotation.area,
+                        iscrowd: annotation.iscrowd,
+                        attributes: annotation.attributes
+                    };
+                    this.dataset.annotations.push(cocoAnnotation);
+                    this.updateDatasetStats();
+                }
+                
                 this.displayAnnotation(annotation);
                 this.updateAnnotationList();
                 
@@ -2342,6 +2555,21 @@
                 // Update the selected annotation reference
                 this.selectedAnnotation = annotation;
                 
+                // In review mode, also update the dataset
+                if (this.appMode === 'review') {
+                    const datasetAnnotationIndex = this.dataset.annotations.findIndex(a => a.id === annotation.id);
+                    if (datasetAnnotationIndex >= 0) {
+                        // Update the annotation in the dataset
+                        this.dataset.annotations[datasetAnnotationIndex] = { ...annotation };
+                        
+                        // Save changes to server
+                        this.saveDatasetToServer(this.currentFrame.sequenceId ? true : false)
+                            .catch(error => {
+                                this.updateStatus(`Error saving to server: ${error.message}`, 'error');
+                            });
+                    }
+                }
+                
                 // Update the annotation list to show the changes
                 this.updateAnnotationList();
                 
@@ -2368,6 +2596,20 @@
                         this.currentFrame.annotations.splice(index, 1);
                     }
                     
+                    // In review mode, also remove from dataset
+                    if (this.appMode === 'review') {
+                        const datasetIndex = this.dataset.annotations.findIndex(a => a.id === annotation.id);
+                        if (datasetIndex > -1) {
+                            this.dataset.annotations.splice(datasetIndex, 1);
+                            
+                            // Save changes to server
+                            this.saveDatasetToServer(this.currentFrame.sequenceId ? true : false)
+                                .catch(error => {
+                                    this.updateStatus(`Error saving to server: ${error.message}`, 'error');
+                                });
+                        }
+                    }
+                    
                     // Remove from display
                     const element = this.elements.screenshotContainer.querySelector(`[data-annotation-id="${annotation.id}"]`);
                     if (element) {
@@ -2381,6 +2623,7 @@
                     }
                     
                     this.updateAnnotationList();
+                    this.updateDatasetStats(); // Update stats in case we're in review mode
                     this.updateStatus(`Annotation ${annotation.id} deleted`);
                 }
             }
@@ -2394,6 +2637,19 @@
             async saveCurrentFrame() {
                 if (!this.currentFrame) {
                     alert('No frame captured');
+                    return;
+                }
+                
+                // In review mode, just save the dataset changes
+                if (this.appMode === 'review') {
+                    try {
+                        await this.saveDatasetToServer(this.currentFrame.sequenceId ? true : false);
+                        this.showFileStatus(`Changes to sample ${this.currentFrame.id} saved successfully`, 'success');
+                        this.updateStatus(`Sample ${this.currentFrame.id} changes saved`);
+                    } catch (error) {
+                        this.showFileStatus(`Error saving changes: ${error.message}`, 'error');
+                        this.updateStatus('Error saving sample changes', 'error');
+                    }
                     return;
                 }
                 
@@ -2641,6 +2897,199 @@
                 setTimeout(() => {
                     this.elements.fileStatus.style.display = 'none';
                 }, 5000);
+            }
+            
+            // Sample Navigation Methods
+            switchMode(mode) {
+                if (this.appMode === mode) return;
+                
+                this.appMode = mode;
+                
+                // Update UI
+                this.elements.captureModeBtn.classList.toggle('active', mode === 'capture');
+                this.elements.reviewModeBtn.classList.toggle('active', mode === 'review');
+                
+                if (mode === 'capture') {
+                    // Switch to capture mode
+                    this.elements.sampleBrowserSection.style.display = 'none';
+                    this.currentSampleIndex = -1;
+                    this.updateStatus('Switched to Live Capture mode');
+                } else {
+                    // Switch to review mode
+                    this.elements.sampleBrowserSection.style.display = 'block';
+                    this.initializeReviewMode();
+                    this.updateStatus('Switched to Review/Edit mode');
+                    
+                    // Stop any active stream
+                    if (this.stream) {
+                        this.stopStream();
+                    }
+                }
+            }
+            
+            initializeReviewMode() {
+                // Get all samples from dataset, sorted chronologically
+                this.filteredSamples = [...this.dataset.images].sort((a, b) => 
+                    new Date(a.date_captured) - new Date(b.date_captured)
+                );
+                
+                if (this.filteredSamples.length === 0) {
+                    this.updateSampleStats();
+                    this.updateStatus('No samples available for review');
+                    return;
+                }
+                
+                // Start with the last captured frame (most recent)
+                const lastIndex = this.filteredSamples.length - 1;
+                this.loadSample(lastIndex);
+            }
+            
+            updateSampleStats() {
+                this.elements.totalSamples.textContent = `${this.filteredSamples.length} samples`;
+                
+                if (this.currentSampleIndex >= 0) {
+                    this.elements.currentSamplePosition.textContent = `${this.currentSampleIndex + 1} of ${this.filteredSamples.length}`;
+                } else {
+                    this.elements.currentSamplePosition.textContent = '-';
+                }
+                
+                // Update navigation buttons
+                this.elements.prevSampleBtn.disabled = this.currentSampleIndex <= 0;
+                this.elements.nextSampleBtn.disabled = this.currentSampleIndex >= this.filteredSamples.length - 1;
+            }
+            
+
+            
+            navigateToSample(direction) {
+                if (this.filteredSamples.length === 0) return;
+                
+                const newIndex = Math.max(0, Math.min(
+                    this.filteredSamples.length - 1,
+                    this.currentSampleIndex + direction
+                ));
+                
+                if (newIndex !== this.currentSampleIndex) {
+                    this.loadSample(newIndex);
+                }
+            }
+            
+            async loadSample(index) {
+                if (index < 0 || index >= this.filteredSamples.length) return;
+                
+                const sample = this.filteredSamples[index];
+                this.currentSampleIndex = index;
+                
+                try {
+                    // Load image from server
+                    let imageDataUrl;
+                    if (this.loadedSampleCache.has(sample.id)) {
+                        imageDataUrl = this.loadedSampleCache.get(sample.id);
+                    } else {
+                        // Determine folder based on sequence
+                        const folder = sample.sequence_id ? 'sequence_data' : 'data';
+                        
+                        try {
+                            // Try to fetch the image file directly
+                            const response = await fetch(`${this.serverUrl}/${folder}/${sample.file_name}`);
+                            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                            
+                            const blob = await response.blob();
+                            imageDataUrl = await new Promise(resolve => {
+                                const reader = new FileReader();
+                                reader.onload = () => resolve(reader.result);
+                                reader.readAsDataURL(blob);
+                            });
+                        } catch (error) {
+                            // If direct fetch fails, try alternative endpoint
+                            console.warn('Direct image fetch failed, trying alternative method:', error);
+                            const response = await fetch(`${this.serverUrl}/files/${folder}/${sample.file_name}`);
+                            if (!response.ok) throw new Error(`Failed to load image: ${response.status}`);
+                            
+                            const blob = await response.blob();
+                            imageDataUrl = await new Promise(resolve => {
+                                const reader = new FileReader();
+                                reader.onload = () => resolve(reader.result);
+                                reader.readAsDataURL(blob);
+                            });
+                        }
+                        
+                        // Cache the loaded image
+                        this.loadedSampleCache.set(sample.id, imageDataUrl);
+                    }
+                    
+                    // Create a frame object similar to captured frames
+                    this.currentFrame = {
+                        id: sample.id,
+                        dataUrl: imageDataUrl,
+                        width: sample.width,
+                        height: sample.height,
+                        timestamp: sample.date_captured,
+                        annotations: this.dataset.annotations.filter(ann => ann.image_id === sample.id),
+                        // Copy sample metadata
+                        sequenceId: sample.sequence_id,
+                        sequencePosition: sample.sequence_position
+                    };
+                    
+                    // Display the loaded sample - wait for image to load before positioning annotations
+                    this.elements.videoContainer.style.display = 'none';
+                    this.elements.screenshotContainer.style.display = 'block';
+                    this.elements.placeholder.style.display = 'none';
+                    
+                    // Clear previous annotations first
+                    this.clearAnnotationDisplay();
+                    
+                    // Set up image load handler to ensure proper annotation positioning
+                    const img = this.elements.screenshot;
+                    const displayAnnotationsWhenReady = () => {
+                        // Small delay to ensure DOM has updated with new image dimensions
+                        setTimeout(() => {
+                            // Display existing annotations after image is fully loaded and rendered
+                            this.currentFrame.annotations.forEach(ann => this.displayAnnotation(ann));
+                            this.updateAnnotationList();
+                        }, 100);
+                    };
+                    
+                    const onImageLoad = () => {
+                        displayAnnotationsWhenReady();
+                        // Remove the event listener
+                        img.removeEventListener('load', onImageLoad);
+                    };
+                    
+                    // Add load event listener before setting src
+                    img.addEventListener('load', onImageLoad);
+                    
+                    // Set the image source
+                    img.src = imageDataUrl;
+                    
+                    // Handle case where image is already cached and load event might not fire
+                    if (img.complete && img.naturalHeight !== 0) {
+                        img.removeEventListener('load', onImageLoad);
+                        displayAnnotationsWhenReady();
+                    }
+                    
+                    // Enable annotation tools for editing
+                    this.elements.drawBboxBtn.disabled = false;
+                    this.elements.addPointBtn.disabled = false;
+                    
+                    // Update form fields
+                    this.elements.frameId.value = `frame_${sample.id}`;
+                    this.elements.application.value = sample.application || '';
+                    this.elements.platform.value = sample.platform || '';
+                    
+                    // Update UI state
+                    this.mode = 'annotating';
+                    this.selectedAnnotation = null;
+                    this.elements.annotationForm.style.display = 'none';
+                    this.updateModeIndicator('Reviewing Sample');
+                    this.updateStatus(`Loaded sample ${sample.id} (${this.currentSampleIndex + 1} of ${this.filteredSamples.length})`);
+                    
+                    // Update sample stats
+                    this.updateSampleStats();
+                    
+                } catch (error) {
+                    this.updateStatus(`Error loading sample: ${error.message}`, 'error');
+                    this.showFileStatus(`Failed to load sample ${sample.id}`, 'error');
+                }
             }
         }
         

@@ -1,13 +1,13 @@
-# GUI Dataset Collector
+# COCO4GUI - A COCO-based GUI Dataset Collector
 
-A comprehensive tool for collecting and building datasets for GUI agents. This tool allows you to capture screenshots of user interfaces, annotate interactions with bounding boxes and click points, and export structured datasets in COCO format.
+A comprehensive tool for collecting and building datasets for GUI agents. This tool allows you to capture screenshots of user interfaces, annotate interactions with bounding boxes and click points, navigate and edit existing samples, and export structured datasets in COCO4GUI format.
 
 ![Vibe](https://img.shields.io/badge/Vibe_coded_with-Claude_4_Opus-blueviolet)
 ![GUI Dataset Collector](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)
 ![Browser](https://img.shields.io/badge/Browser-Chrome%2FFirefox%2FEdge-orange.svg)
 
-<img src="gui_capture_app.gif">
+<img src="gui_capture_app.gif" alt="GUI Dataset Collector Demo">
 
 ## ✨ Features
 
@@ -31,6 +31,8 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 
 - **Clickable annotations** for easy editing and management
 
+- **Live annotation editing** with real-time updates
+
 ### 📝 Rich Metadata Support
 
 - **Image-level metadata**: Application name and platform
@@ -45,7 +47,7 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 
 ### 💾 Data Management
 
-- **COCO dataset format** export for ML compatibility
+- **COCO4GUI dataset format** export for ML compatibility
 
 - **Automatic file naming** with matching image/annotation basenames
 
@@ -54,6 +56,18 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 - **Dataset statistics** tracking (images, annotations count)
 
 - **Resume capability** - load existing datasets and continue
+
+### 🔍 Sample Navigation & Editing
+
+- **Dual-mode interface**: Switch between Live Capture and Review/Edit modes
+
+- **Sample navigation**: Browse through captured frames with Previous/Next controls
+
+- **Real-time editing**: Modify annotations on any previously captured sample
+
+- **Auto-sync**: Changes automatically save to dataset and server
+
+- **Keyboard navigation**: Use arrow keys for quick sample browsing
 
 ## 🛠 Installation
 
@@ -93,6 +107,24 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 2. **Open the application**
 
    Navigate to `http://localhost:3000` in your browser
+
+## 📋 Application Modes
+
+The GUI Dataset Collector operates in two distinct modes:
+
+### 🎥 Live Capture Mode
+
+For capturing new screenshots and creating annotations in real-time.
+
+### ✏️ Review/Edit Mode
+
+For navigating through existing samples and editing their annotations.
+
+Use the mode toggle buttons at the top of the side panel to switch between modes.
+
+---
+
+## 📸 Live Capture Workflow
 
 ### Capturing Data
 
@@ -171,9 +203,49 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 
 #### Exporting Data
 
-- Click "Export Full Dataset" to save the complete COCO dataset
+- Click "Export Full Dataset" to save the complete COCO4GUI dataset
 
 - All data is automatically saved as you work
+
+---
+
+## ✏️ Review/Edit Workflow
+
+### Navigating Existing Samples
+
+#### 1. **Switch to Review Mode**
+
+- Click the "Review/Edit" button in the mode toggle
+- The application automatically loads your most recent captured frame
+- Live capture controls are disabled, navigation controls appear
+
+#### 2. **Browse Through Samples**
+
+- Use **"Previous Sample"** and **"Next Sample"** buttons to navigate
+- Or use **arrow keys** (←/→ or ↑/↓) for keyboard navigation
+- Current position indicator shows "X of Y samples"
+
+#### 3. **Edit Annotations**
+
+- Click on any annotation (bounding box or point) to select it
+- The annotation form appears with current values pre-filled
+- Modify any fields:
+  - Task Description
+  - Action Type
+  - Element Info
+  - Custom Metadata
+- Changes are automatically saved to the dataset
+
+#### 4. **Add New Annotations**
+
+- Use "Draw Bounding Box" or "Add Click Point" tools
+- New annotations are immediately added to the dataset
+- All existing annotation functionality works in review mode
+
+#### 5. **Delete Annotations**
+
+- Select an annotation and click "Delete" or press the Delete key
+- Annotations are immediately removed from the dataset
 
 ## 📁 Output Format
 
@@ -181,15 +253,20 @@ A comprehensive tool for collecting and building datasets for GUI agents. This t
 
 ```shell
 data/
-├── annotations_coco.json    # Complete COCO dataset
+├── annotations_coco.json    # Complete COCO4GUI dataset
 ├── frame_1.png             # Screenshot images
 ├── frame_2.png
 └── ...
+
+sequence_data/               # For sequence captures
+├── sequence_annotations_coco.json
+├── 2024-01-15_14-30-45.png
+└── ...
 ```
 
-### COCO Dataset Format
+### COCO4GUI Dataset Format
 
-The tool exports data in standard COCO format:
+The tool exports data in COCO4GUI format, an extension of COCO optimized for GUI interactions:
 
 ```json
 {
@@ -207,7 +284,10 @@ The tool exports data in standard COCO format:
       "height": 1080,
       "date_captured": "2024-01-01T00:00:00.000Z",
       "application": "Chrome",
-      "platform": "Windows"
+      "platform": "Windows",
+      "sequence_id": "login_flow_001",
+      "sequence_position": 1,
+      "sequence_description": "User login workflow"
     }
   ],
   "annotations": [
@@ -226,7 +306,12 @@ The tool exports data in standard COCO format:
         "custom_metadata": {
           "confidence": "high",
           "difficulty": "easy"
-        }
+        },
+        "previous_annotation_id": null,
+        "previous_step_position": null,
+        "previous_action_type": null,
+        "previous_element_type": null,
+        "steps_since_start": 1
       }
     }
   ],
@@ -237,12 +322,66 @@ The tool exports data in standard COCO format:
 }
 ```
 
+#### COCO4GUI Extensions
+
+COCO4GUI extends the standard COCO format with GUI-specific features:
+
+- **Sequence Support**: `sequence_id`, `sequence_position`, `sequence_description` for multi-step workflows
+- **Platform Metadata**: `application` and `platform` fields for environment context
+- **Step Relationships**: `previous_annotation_id`, `steps_since_start` for workflow dependencies
+- **Rich Attributes**: Detailed `task_description`, `action_type`, and custom metadata per annotation
+
+## 🔗 FiftyOne Integration
+
+COCO4GUI datasets can be seamlessly imported into [FiftyOne](https://voxel51.com/docs/fiftyone/) for advanced dataset visualization, analysis, and management.
+
+### Features
+
+- **Specialized COCO4GUI Importer**: Custom importer that understands GUI-specific annotations and metadata
+- **Dual Annotation Support**: Handles both bounding boxes and keypoints in the same dataset
+- **Sequence Analysis**: Visualize and analyze multi-step GUI workflows
+- **Rich Metadata Fields**: All GUI metadata becomes queryable fields in FiftyOne
+- **Interactive Exploration**: Browse samples, filter by sequences, and analyze interaction patterns
+
+### Quick Start
+
+```python
+import fiftyone as fo
+from coco4gui import COCO4GUIDatasetImporter
+
+# Import your COCO4GUI dataset
+dataset = fo.Dataset.from_importer(
+    COCO4GUIDatasetImporter,
+    dataset_dir="path/to/your/data",
+    data_path="path/to/images",
+    labels_path="annotations_coco.json"
+)
+
+# Launch FiftyOne App for interactive exploration
+session = fo.launch_app(dataset)
+```
+
+### Advanced Analysis
+
+- **Sequence Filtering**: Filter samples by sequence ID or position
+- **Action Analysis**: Analyze distribution of interaction types
+- **Workflow Visualization**: Track user paths through sequences
+- **Performance Metrics**: Measure annotation quality and consistency
+
+For detailed setup instructions, advanced features, and examples, see the [COCO4GUI FiftyOne Integration Guide](COCO4GUI_FIFTYONE_INTEGRATION.md).
+
 ## ⌨️ Keyboard Shortcuts
 
-- **Delete**: Remove selected annotation
+### Live Capture Mode
 
+- **Ctrl+R / Cmd+R**: Refresh stream
+- **Delete**: Remove selected annotation
 - **Esc**: Cancel current drawing operation
 
+### Review/Edit Mode
+
+- **Arrow Keys**: Navigate between samples (←/→ or ↑/↓)
+- **Delete**: Remove selected annotation
 - **Click**: Select annotations for editing
 
 ## 🎛️ UI Components
@@ -257,7 +396,11 @@ The tool exports data in standard COCO format:
 
 ### Side Panel
 
+- **Mode toggle** (Live Capture / Review/Edit)
+
 - **Dataset statistics** (image/annotation counts)
+
+- **Sample navigation** (Previous/Next controls with position indicator)
 
 - **Image metadata** fields (application, platform)
 
@@ -335,6 +478,12 @@ This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENS
 - Click directly on the bounding box or marker
 - Try refreshing if annotations become unresponsive
 
+**Annotations appear in wrong positions:**
+
+- This typically happens when navigating between samples quickly
+- The issue resolves automatically when the image fully loads
+- If persistent, navigate away and back to the sample
+
 **Files not saving:**
 
 - Check that the server is running
@@ -346,9 +495,9 @@ This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENS
 If you use this tool in your research or project, please cite it as:
 
 ```bibtex
-@software{sahota2025guidatasetcollector,
+@software{sahota2025coco4gui,
   author = {Sahota, Harpreet},
-  title = {GUI Dataset Collector: A Tool for Capturing and Annotating GUI Interactions},
+  title = {COCO4GUI - A COCO-based GUI Dataset Collector},
   year = {2025},
   url = {https://github.com/harpreetsahota204/gui_dataset_creator},
 }
@@ -356,4 +505,4 @@ If you use this tool in your research or project, please cite it as:
 
 Or in text:
 
-Sahota, H. (2025). GUI Dataset Collector: A Tool for Capturing and Annotating GUI Interactions [Computer software]. https://github.com/harpreetsahota204/gui_dataset_creator
+Sahota, H. (2025). GUI Dataset Collector: A Tool for Capturing and Annotating GUI Interactions [Computer software]. <https://github.com/harpreetsahota204/gui_dataset_creator>

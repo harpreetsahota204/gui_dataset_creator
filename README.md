@@ -505,4 +505,4 @@ If you use this tool in your research or project, please cite it as:
 
 Or in text:
 
-Sahota, H. (2025). GUI Dataset Collector: A Tool for Capturing and Annotating GUI Interactions [Computer software]. <https://github.com/harpreetsahota204/gui_dataset_creator>
+Sahota, H. (2025). COCO4GUI - A COCO-based GUI Dataset Collector [Computer software]. <https://github.com/harpreetsahota204/gui_dataset_creator>
